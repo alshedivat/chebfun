@@ -15,8 +15,10 @@ SYSSIZE = 0;
 
 % Default options:
 tol = 1e-6;             % 'eps' in Chebfun terminology
-doPlot = 1;             % Plot after every time chunk?
-doHold = 0;             % Hold plot?
+% The default behaviour with no outputs is to plot. If the method is called with
+% outputs, by default, we don't plot.
+doPlot = ( nargout == 0 );
+doHold = false;         % Hold plot?
 plotOpts = {'-'};       % Plotting style
 adjustBCs = true;       % Adjust inconsistent BCs
 throwBCwarning = true;  % Throw a warning for inconsistent BCs
@@ -160,7 +162,7 @@ end
             c = (1+sin(1:SYSSIZE)).'; % Arbitrarily linear combination.
             Uk2 = (Uk*c/sum(c));
             uk2 = tech.make(Uk2, pref);
-            [ishappy, epslevel, cutoff] = classicCheck(uk2, Uk2, [], pref);
+            [ishappy, cutoff] = happinessCheck(uk2, Uk2, [], [], pref);
 
             if ( ishappy )  
 
@@ -172,7 +174,7 @@ end
                 % Store these values:
                 tCurrent = t(kk);
                 uCurrent = chebfun(Uk, DOMAIN, 'tech', techHandle);
-                uCurrent = simplify(uCurrent, epslevel);
+                uCurrent = simplify(uCurrent);
                 
                 COUNTER = COUNTER + 1;
                 uOut{COUNTER} = uCurrent;

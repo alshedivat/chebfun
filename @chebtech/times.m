@@ -35,10 +35,6 @@ elseif ( isa(g, 'double') )     % CHEBTECH .* double
         f.coeffs = 0*f.coeffs(1,:);
     end
     
-    % Update epslevel and vscale:
-    epslevelBound = f.epslevel + abs(eps(g)./g);
-    epslevelBound(g == 0) = eps;
-    f.epslevel = updateEpslevel(f, epslevelBound);
     return
 
 elseif ( ~isa(f, 'chebtech') || ~isa(g, 'chebtech') ) 
@@ -52,34 +48,20 @@ elseif ( size(f.coeffs, 1) == 1 )
     % If we have (constant CHEBTECH).*CHEBTECH, convert the (constant CHEBTECH)
     % to a scalar and call TIMES again:
     f = times(g, f.coeffs);
-    epslevelBound = max(f.epslevel, g.epslevel);
-    f.epslevel = updateEpslevel(f, epslevelBound);
     return
     
 elseif ( size(g.coeffs, 1) == 1)
     % If we have CHEBTECH.*(constant CHEBTECH), convert the (constant CHEBTECH)
     % to a scalar and call TIMES again:
     f = times(f, g.coeffs);
-    epslevelBound = max(f.epslevel, g.epslevel);
-    f.epslevel = updateEpslevel(f, epslevelBound);
     return
     
 end
 
-% Store vscales:
-oldVsclF = f.vscale;
-oldVsclG = g.vscale;
-
 % Do muliplication in coefficient space:
 [f.coeffs, pos] = coeff_times_main(f.coeffs, g.coeffs); 
 
-% Update vscale, epslevel, and ishappy:
-vscl = f.vscale;
-vscl(vscl == 0) = 1; % Avoid NaNs:
-
-% See CHEBTECH CLASSDEF file for documentation on this:
-epslevelBound = (f.epslevel + g.epslevel) .* (oldVsclF.*oldVsclG./vscl);
-f.epslevel = updateEpslevel(f, epslevelBound);
+% Update ishappy:
 f.ishappy = f.ishappy && g.ishappy;
 
 % Simplify!
@@ -149,7 +131,7 @@ function hc = coeff_times(fc, gc)
 %   SIAM Review, 2013). This can be embedded into a Circular matrix and applied
 %   using the FFT:
 
-mn = length(fc);
+mn = size(fc, 1);
 t = [2*fc(1,:) ; fc(2:end,:)];                    % Toeplitz vector.
 x = [2*gc(1,:) ; gc(2:end,:)];                    % Embed in Circulant.
 xprime = fft([x ; x(end:-1:2,:)]);                % FFT for Circulant mult.
