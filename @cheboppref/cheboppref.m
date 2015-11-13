@@ -460,8 +460,8 @@ classdef cheboppref < chebpref
             factoryPrefs.display = 'off';
             factoryPrefs.errTol = 1e-10;
             factoryPrefs.happinessCheck = @standardCheck;
-            factoryPrefs.ivpAbsTol = 1e5*eps;
-            factoryPrefs.ivpRelTol = 100*eps;
+            factoryPrefs.ivpAbsTol = realmin;
+            factoryPrefs.ivpRelTol = 1e-10;
             factoryPrefs.ivpRestartSolver = true;
             factoryPrefs.ivpSolver = @chebfun.ode113;
             factoryPrefs.lambdaMin = 1e-6;
