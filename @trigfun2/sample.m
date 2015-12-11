@@ -21,11 +21,10 @@ end
 [C, D, R] = cdr( f ); 
 
 % Evaluate: 
-% TODO: finish. 
 if ( nargout <= 1 )
-    varargout = { C * d * R.'}; 
+    varargout = { C.values * D * (R.values).'}; 
 else
-    varargout = {C , d, R}; 
+    varargout = {C.values , D, R.values}; 
 end
 
 end

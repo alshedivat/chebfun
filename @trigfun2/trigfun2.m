@@ -1,6 +1,6 @@
 classdef trigfun2 < separableApprox
-%TRIGFUN2   TRIGFUN2 class for representing periodic 
-%                    functions on [-pi,pi]x[-pi,pi].
+%TRIGFUN2   TRIGFUN2 class for representing periodic functions on 
+%                    rectangular domains.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %% CLASS CONSTRUCTOR:
