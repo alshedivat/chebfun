@@ -26,12 +26,33 @@ assert(all(isLinear), 'CHEBFUN:CHEBOP:adjoint:nonlinear', ...
 % Get the value of the highest derivative:
 n = L.diffOrder;
 
-% ADJOINT is supported only for periodic boundary conditions for the moment.
-% [TODO]: Support non-periodic boundary conditions.
-if ( ( ~isa(N.bc, 'char') || ~strcmpi(N.bc,'periodic') ) && ( n > 0 ) ) 
-    error('CHEBFUN:CHEBOP:adjoint:nonperiodic', ...
-        'ADJOINT only supports periodic boundary conditions for the moment.');
+nbcs = length(L.constraint.values);
+
+% Trivial case:
+if ( n == 0 )
+    return
 end
+
+if ( isempty(N.bc) )
+    if ( isempty(N.lbc) && isempty(N.rbc) )
+        bcType = 'nobc';
+    elseif ( nbcs ~= n )
+        bcType = 'bvp';
+    elseif ( isempty(N.rbc) )
+        bcType = 'ivp';
+    elseif ( isempty(N.lbc) )
+        bcType = 'fvp';
+    else
+        bcType = 'bvp';
+    end
+elseif ( ~strcmpi(N.bc, 'periodic') )
+    bcType = 'periodic';
+else
+    error('CHEBFUN:CHEBOP:adjoint:boundaryconds', ...
+        'ADJOINT does not supprot this case');
+end
+
+%% FORMAL ADJOINT
 
 % Extract the blocks of the LINOP:
 blocks = L.blocks;
@@ -71,9 +92,36 @@ for k = 0:n
 end
 
 % Construct a CHEBOP from these new coefficients:
-N = chebop(@(x, u) coeffs2func(u, adjcoeffs), dom);
-N.bc = 'periodic';
+op = @(x, u) coeffs2func(u, adjcoeffs);
+N = chebop(op, dom);
 
+%% BOUNDARY CONDITIONS
+str = '@(u) [u';
+for k = 1:(n-1)
+    str = [str, ' ; diff(u, ' int2str(k) ')']; %#ok<AGROW>
+end
+str = [str '];'];
+f = str2func(str);
+
+switch ( bcType )
+    case 'periodic'
+        N.bc = 'periodic';
+    case 'nobc'
+        N.lbc = f;
+        N.rbc = f;
+        
+    case 'ivp'
+        N.rbc = f;
+        
+    case 'fvp'       
+        N.lbc = f;
+        
+    case 'bvp'
+        % Do stuff. (Can of worms.)
+        error('you suck')
+        
+end
+   
 if ( nargout > 1 )
     % Store the coefficients in a CHEBMATRIX:
     adjcoeffs = chebmatrix(adjcoeffs);
