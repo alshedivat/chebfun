@@ -22,6 +22,7 @@ classdef ratfun
         baryWeights;
         points;
         values;
+        degree;        
         funHandle;
     end
     
@@ -44,15 +45,15 @@ classdef ratfun
                 error( 'RATFUN:ratfun:ctor', 'First argument must be a function handle')                
             end
             
-            n = 8;
-            collocPoints = chebpts(n);            
-            fk = fh(collocPoints);
             tol = 1e-12;
-            [r_handle, min_deg, Xk, Fk, Wk] = ratfun.minratinterp(collocPoints, fk, tol);
-            f.baryWeights = Wk;
-            f.points = Xk;   
-            f.values = Fk;
+            [r_handle, deg, xk, fk, wk] = ratfun.constructor(fh, tol);
+            
+            
+            f.baryWeights = wk;
+            f.points = xk;   
+            f.values = fk;
             f.funHandle = r_handle;
+            f.degree = deg;
             
         end                       
         
@@ -77,6 +78,7 @@ classdef ratfun
     %% STATIC METHODS:
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods ( Access = public, Static = true )
+        [r_handle, deg, xk, fk, wk] = constructor(f, tol)
         [r_handle, min_deg, Xk, Fk, Wk] = minratinterp(x, y, tol);
         [a, perm] = leja_ordering(a);
     end

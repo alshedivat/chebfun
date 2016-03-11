@@ -1,5 +1,6 @@
-function [r, deg, xk, fk, wk] = ratfun(f, tol)
-%RATFUN   Compute rational interpolant for a function on [-1, 1].
+function [r, deg, xk, fk, wk] = constructor(f, tol)
+%CONSTRUCTOR   Constructor for RATFUN Object. 
+%   Compute rational interpolant for a function on [-1, 1].
 %   [R, DEG] = RATFUN(F) computes a rational interpolant to the function handle
 %   F, and returns also the McMillan degree DEG of R. R is a function handle.
 % 
