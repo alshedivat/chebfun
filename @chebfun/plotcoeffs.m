@@ -66,6 +66,50 @@ end
 % Deal with 'LogLog' and input:
 doLogLog = any(cellfun(@(s) strcmpi(s, 'loglog'), varargin));
 
+% In the case where hold is on we need to check if the
+% previous plot adjusted for 0 coefficients. This can
+% be done by checking the y tick marks on the the current
+% axis.
+if ( holdState )
+
+    % grab the tick labels
+    ylabel = get(gca,'yticklabel');
+  
+    % if ylabel is 'Zero' revert ydata
+    if ( ~isempty(ylabel) && strcmpi(ylabel{1},'zero') )
+
+        % Pull out all the line data from the plot
+        axesObjs = get(gcf,'Children');
+        dataObjs = get(axesObjs, 'Children');
+        lineObjs = findobj(dataObjs, 'type', 'line');
+        ydata = get(lineObjs, 'YData');
+        if ( isa(ydata,'double') )
+            ydata = {ydata};
+        end
+    
+        % Get the minimum
+        Ymin = min(cellfun(@min,ydata));
+    
+        % revert smallest entries of ydata to 0
+        for k = 1:numel(ydata)
+            q = ydata{k}; 
+            q(q==Ymin) = 0; 
+            ydata{k} = q; 
+        end
+    
+        % update plot with new ydata
+        for k = 1:numel(lineObjs)
+            set(lineObjs(k), 'YData', ydata{k});
+        end
+        
+        % reset the y ticks and labels
+        set(gca,'YTickLabelMode','auto');
+
+    end
+
+end
+
+
 % Convert to a cell array for easy handling:
 f = mat2cell(f);
 
