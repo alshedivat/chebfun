@@ -89,6 +89,55 @@ if ( ~holdState )
     hold off
 end
 
+% Pull out all the line data from the plot
+axesObjs = get(gcf,'Children');
+dataObjs = get(axesObjs, 'Children');
+lineObjs = findobj(dataObjs, 'type', 'line');
+ydata = get(lineObjs, 'YData');
+if ( isa(ydata,'double') )
+    ydata = {ydata};
+end
+
+% Get the minimum
+Ymin = min(cellfun(@min,ydata));
+
+% If Ymin == 0 we take action
+if ( Ymin == 0 )
+    % get the maximum
+    Ymax = min(cellfun(@max,ydata));
+
+    % get the smallest nonzero number
+    Ymin = Ymax;
+    for k = 1:numel(ydata)
+        q = ydata{k}; qmin = min(q(q>0)); 
+        if ( qmin < Ymin )
+            Ymin = qmin;
+        end
+    end
+
+    % set Ymin to be smallest tick value
+    ytick = get(gca,'ytick'); 
+    Ymin = ytick(1);
+    
+    % update the zero entries of ydata
+    for k = 1:numel(ydata)
+        q = ydata{k}; 
+        q(q==0) = Ymin; 
+        ydata{k} = q; 
+    end
+
+    % update plot with new ydata
+    for k = 1:numel(lineObjs)
+        set(lineObjs(k), 'YData', ydata{k});
+    end
+    
+    % update ylabel
+    ylabel = get(gca,'yticklabel');
+    ylabel{1} = 'Zero'; 
+    set(gca,'yticklabel',ylabel);
+
+end
+
 % Set xScale to logarithmic if requested:
 if ( doLogLog )
     set(gca, 'xScale', 'Log');
@@ -110,11 +159,11 @@ function h = columnPlotCoeffs(f, col, varargin)
 numFuns = numel(f.funs);
 
 % Initialise handle storage:
-h = zeros(numFuns, 1);
+h = cell(1,numFuns);
 
 % Call plotcoeffs at the tech level:
 for j = 1:numFuns
-    h(j) = plotcoeffs(f.funs{j}, varargin{:}, 'color', col); hold on
+    h{j} = plotcoeffs(f.funs{j}, varargin{:}, 'color', col); hold on
 end
 
 end

@@ -59,21 +59,6 @@ holdState = ishold;
 
 % The coefficients and vertical scale:
 absCoeffs = abs(f.coeffs);
-vscl = vscale(f);
-
-% Add a tiny amount to zeros to make plots look nicer:
-if ( vscl > 0 )
-    if ( doBar )
-        absCoeffs(absCoeffs < min(eps*vscl)/100) = 0;
-    else
-        % Min of eps*vscale and the minimum non-zero coefficient:
-        absCoeffs(~absCoeffs) = min( min(eps*vscl), ...
-                                 min(absCoeffs(logical(absCoeffs))) );                             
-    end
-else
-    % Add eps for zero CHEBTECHs:
-    absCoeffs = absCoeffs + eps;
-end
 
 % Get the size:
 [n, m] = size(absCoeffs);
