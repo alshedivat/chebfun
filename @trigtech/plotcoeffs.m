@@ -62,16 +62,6 @@ else
     coeffIndex = -(n-1)/2:(n-1)/2;
 end
 
-% Add a tiny amount to zeros to make plots look nicer:
-if ( vscale(f) > 0 )
-    % (Min of eps*vscale and the minimum non-zero coefficient)
-    absCoeffs(~absCoeffs) = min( min(eps*vscale(f)), ...
-                                 min(absCoeffs(logical(absCoeffs))) );                             
-else
-    % (add eps for zero CHEBTECHs)
-    absCoeffs = absCoeffs + eps;
-end
-
 if ( ~loglogPlot )
     % Plot the coefficients:
     h = semilogy(coeffIndex, absCoeffs, args{:});
