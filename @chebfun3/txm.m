@@ -21,7 +21,11 @@ function T = txm(T, A, varargin)
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
 
-contractionMode = varargin{1};
+if nargin > 2
+  contractionMode = varargin{1};
+else
+  contractionMode = 1;
+end
 dim = max(ndims(T), max(contractionMode));
 
 % Calculate size (add singleton dimensions if A contains more entries)
