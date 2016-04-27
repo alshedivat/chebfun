@@ -919,7 +919,7 @@ function fiberDim = dimCluster(f, d, vectorize)
 % Halton points.
 
 % Generate Halton points to be used.
-numpts = 1e5;
+numpts = 1e4;
 [xx, yy, zz] = halton(numpts, d);
 
 % Compute the expected values.
