@@ -11,6 +11,8 @@ function I = integral(f, varargin)
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
 
+% TODO: Surface integral
+
 if ( nargin == 1 )                         % Another way to do sum3(f) 
     %I = integral3(f); 
     I = sum3(f); 
@@ -24,7 +26,7 @@ else
         ycurve = curve(:, 2); 
         zcurve = curve(:, 3);         
         diffC = diff(curve);
-        ds_squared = diffC(:,1).^2 + diffC(:,2).^2 + diffC(:,3).^2;
+        ds_squared = diffC(:, 1).^2 + diffC(:, 2).^2 + diffC(:, 3).^2;
         I = sum(feval(f, xcurve, ycurve, zcurve) .* sqrt(ds_squared), ...
             curve.domain);
     else
