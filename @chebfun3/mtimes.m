@@ -33,9 +33,10 @@ if ( isa(f, 'chebfun3') )           % CHEBFUN3 * ???
         temp = squeeze(chebfun3.txm(fCore, X.'));
         [U, S, V] = svd(temp, 'econ');
         h = chebfun2();
-        h.cols = fRows * U;
-        h.rows = fTubes * V;
+        h.rows = fRows * U;
+        h.cols = fTubes * V;
         h.pivotValues = 1 ./ diag(S);
+        h.domain = f.domain(3:6);
         
     elseif ( isa(g, 'chebfun2') )   % CHEBFUN3 * CHEBFUN2: modes 1 for now.
         % The output is another CHEBFUN3. Recall that, mode-1 contraction 
