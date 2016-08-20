@@ -1,32 +1,37 @@
 function varargout = scan(f, varargin)
-%SCAN   Contour plots of a CHEBFUN3 object for different cross sections
-%       corresponding to the three variables indicated by either 1, 2 or 3.
-%       The default is dim = 3.
+%SCAN   Contour plots of a CHEBFUN3 object.
+%   SCAN(F, DIM) plot contours of a CHEBFUN3 object F at 9 different
+%   cross sections with the coordinate DIM, where DIM is either 1, 2 or 3.
 %
-%   If f is complex-valued, then phase portraits are used.
+%   SCAN(F, DIM, 'HOLD') plot contours of a CHEBFUN3 object F at 3 cross 
+%   sections along the coordinate DIM and hold all three.
+%
+%   SCAN(F) is the same as SCAN(F, 1).
+%
+%   If F is complex-valued, then phase portraits are used.
 % 
-%   See also CHEBFUN3/PLOT, CHEBFUN3/SLICE, CHEBFUN3/ISOSURFACE, and 
-%   CHEBFUN3/SURF.
+% See also CHEBFUN3/PLOT, CHEBFUN3/SLICE, CHEBFUN3/ISOSURFACE, and 
+% CHEBFUN3/SURF.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
 
 holdState = ishold;
 noSlices = 9; 
-noHoldSlices = 3; 
+noHoldSlices = 3;
 pauseTime = 0.5;
 dom = f.domain;
 isHold = 0; % The default 'hold' flag.
 
 if ( nargin == 1 )
-    dim = 3; 
+    dim = 1; 
 elseif ( nargin == 2 )
     if ( strcmpi(varargin{1}, 'hold'))
     isHold = 1; 
-    dim = 3;
+    dim = 1;
     elseif ( strcmpi(varargin{1}, 'ct'))
     ct_flag = 1; 
-    dim = 3;    
+    dim = 1;    
     else
         dim = varargin{1};
     end
@@ -47,7 +52,7 @@ numpts = 51;
 vv = feval(f, xx, yy, zz);
 
 %%
-if ( dim == 3 && ~isHold )
+if ( ( dim == 3 ) && ~isHold )
     zslices = linspace(dom(5), dom(6), noSlices);
     
     for i=1:numel(zslices)
@@ -68,7 +73,7 @@ if ( dim == 3 && ~isHold )
         pause(pauseTime)
         drawnow
     end
-elseif ( dim == 3 && isHold )
+elseif ( ( dim == 3 ) && isHold )
     zslices = linspace(dom(5), dom(6), noHoldSlices);
     for i=1:numel(zslices)
         if isreal(vv)
@@ -87,15 +92,8 @@ elseif ( dim == 3 && isHold )
         pause(pauseTime)
         drawnow
     end
-    
-% elseif ( dim == 3 && ct_flag)
-%     for i = 1:9
-%         subplot(3,3,ii)
-%         
-%         
-%     end
-    
-elseif ( dim == 2 && ~isHold )
+        
+elseif ( ( dim == 2 ) && ~isHold )
     yslices = linspace(dom(3), dom(4), noSlices);
     for i=1:numel(yslices)
         if isreal(vv)
@@ -114,7 +112,7 @@ elseif ( dim == 2 && ~isHold )
         pause(pauseTime)
         drawnow
     end
-elseif ( dim == 2 && isHold )
+elseif ( ( dim == 2 ) && isHold )
     yslices = linspace(dom(3), dom(4), noHoldSlices);
     for i=1:numel(yslices)
         if ( isreal(vv) )
@@ -133,7 +131,7 @@ elseif ( dim == 2 && isHold )
         pause(pauseTime)
         drawnow
     end
-elseif ( dim == 1 && ~isHold )
+elseif ( ( dim == 1 ) && ~isHold )
     xslices = linspace(dom(1), dom(2), noSlices);
     for i=1:numel(xslices)
         if ( isreal(vv) )
@@ -152,7 +150,7 @@ elseif ( dim == 1 && ~isHold )
         pause(pauseTime)
         drawnow
     end
-elseif ( dim == 1 && isHold )
+elseif ( ( dim == 1 ) && isHold )
     xslices = linspace(dom(1), dom(2), noHoldSlices);
     for i=1:numel(xslices)
         if ( isreal(vv) )

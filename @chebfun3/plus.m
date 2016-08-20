@@ -1,4 +1,4 @@
-function h = plus(f, g, tol)
+function h = plus(f, g)
 %+   Plus for CHEBFUN3 objects.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
@@ -11,9 +11,9 @@ elseif ( isempty(g) || isempty(f) ) % CHEBFUN3 + []
     % Return empty CHEBFUN3.
     h = chebfun3();
     
-elseif ( isa( g, 'double' ) )           % CHEBFUN3 + DOUBLE
+elseif ( isa(g, 'double') )           % CHEBFUN3 + DOUBLE
     % Convert g to a CHEBFUN3.
-    g = chebfun3( g, f.domain );
+    g = chebfun3(g, f.domain);
     h = plus(f, g);
     
 elseif ( ~isa(g, 'chebfun3') )          % CHEBFUN3 + ???
@@ -32,54 +32,53 @@ else                                     % CHEBFUN3 + CHEBFUN3
         h = g;
     elseif ( iszero(g) )
         h = f;
-    else
-        % This is trying to take care of case in which f and g are both
-        % close to zero... 
-         vscaleBnd = [vscale(f), vscale(g)]; % Send both vscales to 
-         % constructor, so that it takes care of the case that f+g is 
-         % subject to cancellation errors. See constructor/getTol3D.
-         %vscaleBnd = vscale(f)+vscale(g);             
-         h = chebfun3(@(x, y, z) feval(f, x, y, z) + feval(g, x, y, z), ...
-             f.domain, 'vscaleBnd', vscaleBnd, 'fiberDim',3);
-         
-%         h = compressed_plus(f, g); % bypass the constructor and call the compressed version
+    else        
+        % Add together two nonzero CHEBFUN3 objects:
+        % Developer Note: If f+g has values close to zero, i.e., when 
+        % computing f+g is subject to cancellation errors, the tolerance
+        % computed in Chebfun3 constructor, used to stop adding new terms
+        % to the BTD, will be roughly eps^2 which we cannot attain anyway.
+        % See constructor/getTol3D. Here, the idea is to send an absolute 
+        % tolerance to the constructor for computing f+g. In other words,
+        % we do not expect accuracy better than the condition number of the
+        % plus operation times CHEBFUN3EPS. Let's compute the condition 
+        % number of the plus operation f + g, i.e., ||f|| + ||g|| / ||f+g||
+        % We first compute a rough approximate vscale for f+g:
+        m = 51; % size of sampling grid
+        hVals = sample(f, m, m, m) + sample(g, m, m, m);
+        hVscale = max(abs(hVals(:)));
+        vscaleFG = [vscale(f), vscale(g)];
+        kappa = sum(vscaleFG)/hVscale;
+        % Developer Note: Since kappa is big, if g ~= -f, this helps us 
+        % find out cases prone to cancellation errors, i.e., in this case 
+        % we expect less from the constructor. 
+        pref = chebfunpref(); prefStruct = pref.cheb3Prefs;
+        eps = prefStruct.chebfun3eps;
+        tol = eps*kappa;
+        h = chebfun3(@(x, y, z) feval(f, x, y, z) + feval(g, x, y, z), ...
+            f.domain, 'eps', tol);         
+%         h = compressed_plus(f, g); % bypass the constructor and call the
+%         compressed version
    end 
     
 end
 
-% if ( iszero(f) )
-%     h = g;
-%     elseif ( iszero(g) )
-%         h = f;
-% else
-%     % Add together two nonzero CHEBFUN3 objects:
 end
 
-
-% f = chebfun(@(x) sin(x),[0,1]);
-% g = chebfun(@(x) sqrt(1-cos(x).^2),[0,1]);
-% h = f-g % fast, because coeffs are added not values. But here is what happens 
-% % if we force 1D chebfun to call the constructor for doing plus:
-% h = chebfun(@(x) f(x)-g(x),[0,1])
-% % Warning: Function not resolved using 65537 pts. Have you tried 'splitting on'? 
-% % > In chebfun/constructor>constructorNoSplit (line 120)
-% %   In chebfun/constructor (line 63)
-% %   In chebfun (line 219) 
-
-% 2 related problems for Chebfun2:
-% 1) computing laplacian of a harmonic function with "compression_plus" being disabled.
-% 2) https://github.com/chebfun/chebfun/issues/1536
-% Here we are calling 2D constructor for "times" on an object close to zero.
-
-%%
-
 function h = compressed_plus(f, g)
-% Add CHEBFUN3 objects together by a compression algorithm.
+% This is an alternative plus algorithm for CHEBFUN3 objects. It takes the
+% structure of F and G into account and does NOT call the constructror.
 
-% The algorithm is as follows:
-% If A = ACore x_1 ACols x_2 ARows x_3 ATubes, and 
+% The algorithm is a generalization of CHEBFUN2 plus to 3D. If 
+% A = ACore x_1 ACols x_2 ARows x_3 ATubes, and 
 % B = BCore x_1 BCols x_2 BRows x_3 BTubes, then
-% A + B = ...
+% C := A + B has a _block diagonal_ core tensor formed by ACore and BCore, 
+% and we have: CCols = [ACols, BCols], CRows = [ARows, BRows], and 
+% CTubes = [ATubes, BTubes].
+% This result in ranks being doubled and the following code tries to 
+% compress the factors and core tensor.
+
+% It's drawback is that it might be much slower than calling the constructor.
 
 [fCore, fCols, fRows, fTubes] = tucker(f);
 [gCore, gCols, gRows, gTubes] = tucker(g);
@@ -100,7 +99,7 @@ allCores(1:r1f, 1:r2f, 1:r3f) = fCore;
 allCores(r1f+1:end, r2f+1:end, r3f+1:end) = gCore;
 allCores = chebfun3.txm(chebfun3.txm(chebfun3.txm(allCores, RCols, 1), ...
     RRows, 2), RTubes, 3);
-[core, U1, U2, U3] = chebfun3.discrete_hosvd(allCores);
+[core, U1, U2, U3] = chebfun3.discreteHOSVD(allCores);
 
 % No truncation yet
 % % Compress the format if possible. Warning: In contrast to 2D, truncating
@@ -159,3 +158,20 @@ elseif n == 3
 end
 
 end
+
+%%
+% f = chebfun(@(x) sin(x),[0,1]);
+% g = chebfun(@(x) sqrt(1-cos(x).^2),[0,1]);
+% h = f-g % fast, because coeffs are added not values. But here is what happens 
+% % if we force 1D chebfun to call the constructor for doing plus:
+% h = chebfun(@(x) f(x)-g(x),[0,1])
+% % Warning: Function not resolved using 65537 pts. Have you tried 'splitting on'? 
+% % > In chebfun/constructor>constructorNoSplit (line 120)
+% %   In chebfun/constructor (line 63)
+% %   In chebfun (line 219) 
+
+% 2 related problems for Chebfun2:
+% 1) computing laplacian of a harmonic function with "compression_plus" being
+% disabled.
+% 2) https://github.com/chebfun/chebfun/issues/1536
+% Here we are calling 2D constructor for "times" on an object close to zero.

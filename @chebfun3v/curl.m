@@ -1,6 +1,6 @@
 function F = curl(F)
-%CURL  curl of a CHEBFUN3V
-%   S = CURL(F) returns the CHEBFUN3 of the curl of F. If F is a CHEBFUN3V 
+%CURL   Curl of a CHEBFUN3V object.
+%   G = CURL(F) returns the CHEBFUN3V of the curl of F. If F is a CHEBFUN3V 
 %   with three components then it returns the CHEBFUN3V representing the 3D
 %   curl operation.
 
@@ -8,7 +8,7 @@ function F = curl(F)
 % See http://www.chebfun.org/ for Chebfun information.
 
 % Empty check: 
-if ( isempty( F ) )
+if ( isempty(F) )
     F = chebfun3v;
     return
 end
@@ -21,7 +21,7 @@ if ( F.nComponents == 3 )   % 3D curl
         diff(Fc{2}, 1, 1) - diff(Fc{1}, 1, 2)];
 else                      
      error('CHEBFUN:CHEBFUN3V:curl:notSupported', ...
-        'three inputs are needed.')
+        'Defined only for CHEBFUN3V objects with three components.')
 end
 
 end

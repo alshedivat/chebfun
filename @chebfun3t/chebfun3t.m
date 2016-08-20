@@ -1,9 +1,13 @@
 classdef chebfun3t
-%CHEBFUN3T   CHEBFUN3T class for representing functions on [a,b]x[c,d]x[e,g].
+%CHEBFUN3T   Class for representing functions on [a,b]x[c,d]x[e,g] using 
+%   tensor product approach.
+%
+%   This is experimental code, not for ordinary use.
 % 
-%   Class for approximating smooth functions defined on finite boxes using 
-%   the vanilla flavoured full tensor product approach. The output contains 
-%   a tensor of coefficients of the Chebyshev expansion of the input function.
+%   Class for approximating smooth functions defined on finite cuboids 
+%   using the vanilla flavoured full tensor product approach. The output 
+%   contains a tensor of coefficients of the Chebyshev expansion of the 
+%   input function.
 %
 %   CHEBFUN3T(F) constructs a CHEBFUN3T object representing the function F on
 %   [-1,1]x[-1 1]x[-1 1]. F should be a function handle, e.g.,
@@ -11,7 +15,7 @@ classdef chebfun3t
 %   the sense that it may be evaluated at a tensor of points and returns a 
 %   tensor output. 
 %
-%   CHEBFUN3T(F, 'eps', ep) specifies chebfun3eps to be epsVal.
+%   CHEBFUN3T(F, 'eps', ep) specifies chebfun3eps to be ep.
 %
 %   CHEBFUN3T(F, [A B C D E G]) specifies a cube [A B]x[C D]x[E G] where the 
 %   function is defined. A, B, C, D, E and G must all be finite.
@@ -22,6 +26,8 @@ classdef chebfun3t
 %   f3t = chebfun3t(f, [-2 2 1 2 1 3]);
 %   f3t = chebfun3t(f,'eps', 1e-10);
 %   f3t = chebfun3t(f,[-2 2 1 2 1 3],'eps', 1e-10);
+%
+% See also CHEBFUN3 and CHEBFUN3V.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
@@ -30,13 +36,13 @@ classdef chebfun3t
     %% CLASS PROPERTIES:
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 	properties        
-        % COEFFS: tensor of coefficients of the Chebyshev expansion of f
+        % COEFFS: tensor of coefficients of the Chebyshev expansion of f.
 		coeffs
         
-        % VSCALE: max abs of tensor of samples
+        % VSCALE: max abs of tensor of samples.
 		vscale
                 
-        % DOMAIN: box of CHEBFUN3T, default is [-1,1] x [-1,1] x [-1,1]
+        % DOMAIN: cuboid of CHEBFUN3T, default is [-1,1] x [-1,1] x [-1,1].
         domain
     end
     
@@ -51,7 +57,7 @@ classdef chebfun3t
             if ( (nargin == 0) || isempty(varargin{1}) )
                 return
             end
-            % Call the constructor, all the work is done here:
+            % Call the constructor. All the work is done here:
             f = constructor(f, varargin{:});
             end
     end
@@ -61,19 +67,19 @@ classdef chebfun3t
     %% CLASS METHODS:
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     methods (Access = public, Static = true)
-        % Tensor unfolding
+        % Unfolding of a discrete tensor.
         varargout = unfold(varargin)
         
-        % Reshape the matrix back to a tensor
+        % Reshape a discrete matrix back to a tensor.
         varargout = fold(varargin)
         
-        % Tensor contractions
+        % Tensor-matrix contractions.
         varargout = txm(varargin)        
         
-        % vals2coeffs
+        % Convert 3D values to 3D coefficients.
         coeffs3D = vals2coeffs(vals3D);
     
-        % coeffs2vals
+        % Convert 3D coefficients to 3D values.
         vals3D = coeffs2vals(coeffs3D);
     
     end
@@ -85,7 +91,7 @@ classdef chebfun3t
         % Display a CHEBFUN3T.
         varargout = display(varargin);
         
-        % sampleTest
+        % sampleTest for a CHEBFUN3T object.
         varargout = sampleTest(f, varargin);
         
         % Evaluate a CHEBFUN3T.
@@ -94,51 +100,88 @@ classdef chebfun3t
         % Get properties of a CHEBFUN3T object.
         out = get(f, idx);
         
-        % Length of a CHEBFUN3tT
+        % Length of a CHEBFUN3T.
         varargout = length(f);
         
-        % Number of degrees of freedom needed to represent a CHEBFUN3T
+        % Number of degrees of freedom needed to represent a CHEBFUN3T.
         out = ndf(f);
+        
+        % Definite integral of a CHEBFUN3T over its domain.
+        out = sum3(f);
+        
+        % Norm of a CHEBFUN3T.
+        out = norm(f);
 
+        % Plotcoeffs of a CHEBFUN3T.
+        out = plotcoeffs(f)
+
+        % Addition of two CHEBFUN3T objects.
+        out = plus(f, g);
+        
+        % Negation of a CHEBFUN3T object.
+        out = uminus(f);        
+        
+        % Subtraction of two CHEBFUN3T objects.
+        out = minus(f, g);
+        
+        % Pointwise multiplication of two CHEBFUN3T objects.
+        out = times(f, g);
+        
+        % Scalar multiplication for CHEBFUN3T objects.
+        out = mtimes(f, g);
+        
+        % Pointwise right divide of CHEBFUN3T objects.
+        out = rdivide(f, g);
+        
+        % Pointwise left divide of CHEBFUN3T objects.
+        out = ldivide(f, g);
+        
+        % Right divide for CHEBFUN3T objects.
+        out = mrdivide(f, g);        
+        
+        % Pointwise power of a CHEBFUN3T.
+        out = power(varargin);
+        
+        % Sine of a CHEBFUN3T.
+        out = sin(f);
+
+        % Cosine of a CHEBFUN3T.
+        out = cos(f);
+       
+        % Tangent of a CHEBFUN3T.
+        out = tan(f);
+       
+        % Tangent of a CHEBFUN3T (in degrees).
+        out = tand(f);
+        
+        % Hyperbolic sine of a CHEBFUN3T.
+        out = sinh(f);
+       
+        % Hyperbolic cosine of a CHEBFUN3T.
+        out = cosh(f);
+
+        % Hyperbolic tangent of a CHEBFUN3T.
+        out = tanh(f);
+       
+        % Exponential of a CHEBFUN3T.
+        out = exp(f);
+              
+        % Test whether a CHEBFUN3T object is empty.
+        out = isempty(f);
+       
+    end
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% HIDDEN METHODS:
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    methods ( Hidden = true, Static = false )
+        
+        % Test if two CHEBFUN3T objects have the same domain.
+        out = domainCheck(f, g);
+        
         % Vertical scale of a CHEBFUN3T
         out = vertscale(f);
         
-        % Definite integral of a CHEBFUN3T over its domain
-        out = sum3(f);
-        
-        out = plotcoeffs(f)
-
-        % Addition of two CHEBFUN3T objects
-        out = plus(f, g);
-        
-        % Negation of a CHEBFUN3T object
-        out = uminus(f);        
-        
-        % Subtraction of two CHEBFUN3T objects
-        out = minus(f, g);
-        
-        % Multiplication of two CHEBFUN3T objects
-        %out = times(f, g);
-        out = times(f, g, tol);
-        
-        out = power(varargin);
-        
-       out = sin(f);
-
-       %Cosine of a CHEBFUN3T
-       out = cos(f);
-       
-       out = tan(f);
-       
-       out = tand(f);
-       
-       out = tanh(f);
-       
-       out = exp(f);
-       
-       out = sinh(f);
-       
-       out = cosh(f);
-    end
+    end    
     
 end

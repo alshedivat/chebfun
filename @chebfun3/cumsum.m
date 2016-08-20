@@ -1,15 +1,15 @@
 function f = cumsum(f, dim)
 %CUMSUM   Indefinite integral of a CHEBFUN3.
 %   F = CUMSUM(F) returns the indefinite integral of a CHEBFUN3 with 
-%   respect to one variable and hence, returns a chebfun3 object. The 
+%   respect to one variable and hence, returns a CHEBFUN3 object. The 
 %   integration is done by default in the x-direction.
 %
 %   F = CUMSUM(F, DIM). If DIM = 1 integration is along the x-direction, if 
 %   DIM = 2 integration is along the y-direction, and if DIM = 3 
 %   integration is along the z-direction.
 %
-%   See also chebfun3/cumsum2, chebfun3/cumsum3, chebfun3/sum, 
-%   chebfun3/sum and chebfun3/sum3.
+% See also CHEBFUN3/CUMSUM2, CHEBFUN3/CUMSUM3, CHEBFUN3/SUM, 
+%   CHEBFUN3/SUM2 and CHEBFUN3/SUM3.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.

@@ -1,47 +1,43 @@
 function varargout = isosurface(f, varargin)
-%ISOSURFACE  Extract isosurface data from a CHEBFUN3
+%ISOSURFACE   Plots an isosurface of a CHEBFUN3.
+%   ISOSURFACE(F) plots an isosurface of the CHEBFUN3 object F in a GUI so 
+%   that the user can use a slider to change the level.
 %
-%   ISOSURFACE(F) plots isosurface of the CHEBFUN3 object F as a 
-%   GUI so that the user can use a slider to change the isosurface.
+%   ISOSURFACE(F, 'NPTS', N) plots an isosurface of F again with sliders
+%   but allows the user to adjust the grid size (the number of points
+%   in each direction) used to create the plot.  Default: N = 51.
 %
-%   ISOSURFACE(F, 'NPTS', n) plots isosurface of the CHEBFUN3 object F
-%   again with sliders but allows user to adjust the grid size (i.e., the 
-%   number of points) that is used to create the isosurface plot.
+%   ISOSURFACE(F, 'NOSLIDER') plots 3 isosurfaces at three
+%   automatically-chosen levels. There is no slider.
 %
-%   ISOSURFACE(F, 'NOSLIDER') plots 3 isosurfaces of the CHEBFUN3 object F 
-%   at three automatically-chosen level surfaces. The slider is not shown
-%   anymore.
+%   ISOSURFACE(F, LEV) plots the isosurface of F at the level specified by 
+%   the scalar LEV. 
 %
-%   ISOSURFACE(F, LEV) plots isosurface of F at a level specified in the
-%   scalar LEV. 
+%   ISOSURFACE(F, LEV, 'NPTS', N) plots the isosurface and also lets
+%   the user specify the plotting grid size N.
 %
-%   ISOSURFACE(F, LEV, 'NPTS', n) plots isosurface of the CHEBFUN3 object F
-%    at a level specified in the scalar LEV, but allows user to specify the
-%    underlying grid size for plotting.
-%
-%   Example 1: f = cheb.gallery3('runge');
-%            isosurface(f, [0.8])
-%
-%   ISOSURFACE(F,LEV,...) allows plotting isosurfaces of F at specified 
+%   ISOSURFACE(F,LEV,...) allows plotting of isosurfaces with specified 
 %   level, color and style.
 %
-%   If F is complex-valued, then its complex magnitude is used.
+%   If F is complex-valued, then its absolute value is plotted.
 %
-%   See also CHEBFUN3/PLOT, CHEBFUN3/SLICE, SCAN, and CHEBFUN3/SURF.
+%   Example 1: f = cheb.gallery3('runge');
+%            isosurface(f, 0.8)
 %
 %   Example 2: f = chebfun3(@(x,y,z) tanh(x+y-.3) + cos(x.*y.*z)./(4+x-y-z));
 %            isosurface(f)
-
-%   Developer Note: This code might run slow, as evalutaion is not 
-%   specially slow in Chebfun3, but because isosurface plots can be slow to
-%   render in the core MATLAB. The time spent in pure Chebfun side of this 
-%   code might be 1% the time spent just in the line that calls isosurface 
-%   command of core MATLAB. This is an issue related to how graphics are
-%   handled in MATLAB with different graphic cards.
+%
+% See also CHEBFUN3/PLOT, CHEBFUN3/SLICE, CHEBFUN3/SCAN and CHEBFUN3/SURF.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
 
+%   Developer Note: This code might run slowly, not because evaluation is
+%   especially slow in Chebfun3, but because isosurface plots can be slow to
+%   render in core MATLAB. The time spent on the pure Chebfun side of this 
+%   code might be 1% of the time spent just in the line that calls the
+%   isosurface command of MATLAB. This is an issue related to how graphics
+%   are handled in MATLAB with different graphic cards.
 
 numpts = [];
 if ( nargin > 1 )
@@ -54,18 +50,17 @@ end
 if ( isempty(numpts) )
     numpts = 51;
 end
-    
 
+% Call newplot() manually to prepare the figure/axes for plotting because
+% built-in isosurface() doesn't.
+newplot();
 
-%if ( nargin == 1 )
-%    runIsosurface3GUI(f);
 if ( nargin == 1 || (nargin == 3 && strcmp(varargin{1}, 'npts')) )
     % User has specified the size of grid to sample for the isosurface plot.
     runIsosurface3GUI(f, numpts);
 else
     holdState = ishold;
     dom = f.domain;
-    %numpts = 51;
     [xx, yy, zz] = meshgrid(linspace(dom(1), dom(2), numpts), ...
         linspace(dom(3), dom(4), numpts), linspace(dom(5), dom(6), numpts));
     v = feval(f, xx, yy, zz);
@@ -74,7 +69,8 @@ else
     end
 end
 
-if ( nargin == 2 && strcmp(varargin, 'noslider') ) % Levels are not specified. So, choose 3 levels yourself.
+if ( nargin == 2 && strcmp(varargin, 'noslider') ) 
+    % Levels are not specified. So, choose 3 levels yourself.
     fMin = min(v(:)); 
     fMax = max(v(:)); 
     fMean = (fMin + fMax)/2;
@@ -95,8 +91,7 @@ if ( nargin == 2 && strcmp(varargin, 'noslider') ) % Levels are not specified. S
     % Make objects transparent.
     alpha(.4) 
     
-    hold off; 
-    %camlight; 
+    hold off;
     camlight('headlight')
     lighting gouraud
     view(3)
@@ -116,7 +111,7 @@ if ( nargin == 2 && strcmp(varargin, 'noslider') ) % Levels are not specified. S
      return
     
 elseif ( nargin == 2 || (nargin == 4 && strcmp(varargin{2}, 'npts')) )
-    % Isovalues are given. But colors and style are not specified.
+    % Isovalues are given, but colors and style are not specified.
     if iscell(varargin(1))
         isovals = cell2mat(varargin(1));
     else
@@ -125,22 +120,21 @@ elseif ( nargin == 2 || (nargin == 4 && strcmp(varargin{2}, 'npts')) )
     
     if ( numel(isovals) == 1 )
          p = patch(isosurface(xx, yy, zz, v, isovals));
-         p.FaceColor = 'green'; 
+         p.FaceColor = 'red'; 
          p.EdgeColor = 'none';
          
-        isosurface(xx, yy, zz, v, isovals);
-        camlight('headlight')
-        lighting gouraud
-        view(3)
-        xlim([dom(1) dom(2)])
-        ylim([dom(3) dom(4)])
-        zlim([dom(5) dom(6)])
-        if ( ~holdState )
-            hold off
-        end
-        if ( nargout > 0 )
-            varargout = {p};
-        end
+         camlight('headlight')
+         lighting gouraud
+         view(3)
+         xlim([dom(1) dom(2)])
+         ylim([dom(3) dom(4)])
+         zlim([dom(5) dom(6)])
+         if ( ~holdState )
+             hold off
+         end
+         if ( nargout > 0 )
+             varargout = {p};
+         end
     end
     
 elseif ( nargin==3 && ~strcmp(varargin{1}, 'npts') ) % Levels, colors and/or style are specified.
@@ -165,14 +159,12 @@ elseif ( nargin==3 && ~strcmp(varargin{1}, 'npts') ) % Levels, colors and/or sty
     xlim([dom(1) dom(2)])
     ylim([dom(3) dom(4)])
     zlim([dom(5) dom(6)])
-    axis tight
     if ( ~holdState )
         hold off
     end
      if ( nargout > 0 )
          varargout = {p};
-     end
-     
+     end     
      
 elseif ( nargin==5 && strcmp(varargin{3}, 'npts') ) % Levels, colors and/or style are specified.
     cc = regexp( varargin{2}, '[bgrcmykw]', 'match' );       % color
@@ -215,11 +207,6 @@ h = instantiateIsosurface3();
 handles = guihandles(h);
 
 dom = f.domain;
-% if nargin > 1
-%     numpts = npts; % User has specified the size of grid to sample
-% else
-%     numpts = 51;
-% end
 [xx, yy, zz] = meshgrid(linspace(dom(1), dom(2), numpts), ...
     linspace(dom(3), dom(4), numpts), linspace(dom(5), dom(6), numpts));
 v = feval(f, xx, yy, zz);
@@ -266,12 +253,11 @@ handles.output = handles.isosurfaceSlider;
 
 end
 
-
 function h = instantiateIsosurface3()
 
 % Load up the GUI from the *.fig file.
 installDir = chebfunroot();
-h = openfig( [installDir '/@chebfun3/isosurface.fig'], 'invisible');
+h = openFigInCurrentFigure([installDir '/@chebfun3/isosurface.fig']);
 
 % Do any required initialization of the handle graphics objects.
 G = get(h, 'Children');
@@ -294,26 +280,25 @@ for (i = 1:1:length(G))
     end
 end
 
-% Add a toolbar to the GUI.
-set(h,'toolbar','figure');
-
 % Store handles to GUI objects so that the callbacks can access them. 
 guidata(h, guihandles(h));
 
-% Make the GUI window "visible" to the rest of the handle graphics
-% system so that things like gcf(), gca(), etc. work properly.
-set(h, 'HandleVisibility', 'on');
+% Force the figure to clear when another plot is drawn on it so that GUI
+% widgets don't linger.  (NB:  This property needs to be reset to 'add' every
+% time we change the plot using a slider; otherwise, the slider movement will
+% itself clear the figure, which is not what we want.)
+set(h, 'NextPlot', 'replacechildren');
 
-% Draw the GUI.
-set(h, 'Visible', 'on');
 end
 
-
-% --- Executes on zSlider movement.
 function isosurfaceSlider_Callback(hObject, eventdata, handles)
+% --- Executes on zSlider movement.
 % hObject    handle to isosurfaceSlider (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+nextPlot = get(hObject.Parent, 'NextPlot');
+set(hObject.Parent, 'NextPlot', 'add');
 
 isoVal = get(hObject, 'Value'); %returns position of slider
 dom = handles.dom;
@@ -328,12 +313,13 @@ p.EdgeColor = 'none';
 camlight 
 lighting gouraud
 
-
 % Put the current value of the slider on the GUI
 set(handles.printedIsoVal, 'String', num2str(isoVal));
 xlim([dom(1) dom(2)])
 ylim([dom(3) dom(4)])
 zlim([dom(5) dom(6)])
 handles.output = hObject;
+
+set(hObject.Parent, 'NextPlot', nextPlot);
 
 end

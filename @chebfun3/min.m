@@ -1,16 +1,15 @@
 function h = min(f, g, dim)
 %MIN   Minimum value of a CHEBFUN3 in one direction.
-%
-%   MIN(F) returns a chebfun2 representing the minimum of the CHEBFUN3 
-%   along the x direction, i.e, MIN(F) = @(y,z) min(F(:, y, z))
+%   MIN(F) returns a CHEBFUN2 representing the minimum of the CHEBFUN3
+%   object F along the x direction, i.e, MIN(F) = @(y,z) min(F(:, y, z)).
 %
 %   MIN(F, [], DIM) returns a CHEBFUN2 representing the minimum of F along 
-%   the DIM direction. DIM = 1 means along the x-direction, DIM = 2 is 
-%   along the y-direction, and DIM = 3 means along the z-direction.
+%   the dimension DIM. DIM should be 1, 2 or 3 to minimize over X, Y or Z,
+%   respectively.
 %
 %   WARNING: This function is not always accurate to the expected precision.
 % 
-%   For the global minimum use MIN3.
+% See also CHEBFUN3/MIN2 and CHEBFUN3/MIN3.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
@@ -30,8 +29,8 @@ if ( nargin < 3 )
     dim = 1;
 end
 
-% Do not allow min(F, G): 
-if ( nargin > 1 && ~isempty( g ) )
+% Do not allow min(F, G):
+if ( nargin > 1 && ~isempty(g) )
     error('CHEBFUN:CHEBFUN3:min:twoCHEBFUN3Inputs', ...
         'Unable to minimize two CHEBFUN3 objects.');
 end
@@ -43,24 +42,26 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 dom = f.domain;
-n = 512;
+n = 129;
 if ( dim == 1 )
     vals = sample(f, n, n, n); 
     h = chebfun2(squeeze(min(vals, [], 1)), dom(3:6));
     h = simplify(h);
+    
 elseif ( dim == 2 )
     vals = sample(f, n, n, n);
     h = chebfun2(squeeze(min(vals, [], 2)), [dom(1:2), dom(5:6)]);
     h = simplify(h);
+    
 elseif ( dim == 3 )
     vals = sample(f, n, n, n);  
     h = chebfun2(min(vals, [], 3), dom(1:4));
-    h = simplify(h);        
+    h = simplify(h);
+    
 elseif ( dim == 0 )
-    error('CHEBFUN:CHEBFUN3:min:dim', ...
-        'Dimension argument must be a positive integer scalar within indexing range.')
+    error('CHEBFUN:CHEBFUN3:min:dim', 'dim must be 1, 2, or 3.')
 else
-   % return the CHEBFUN3 object. This is analogous to that MIN() command in
+   % Return the CHEBFUN3 object. This is analogous to that MIN() command in
    % MATLAB.
    h = f;  
 end

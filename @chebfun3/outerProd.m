@@ -1,12 +1,14 @@
 function T = outerProd(A, B)
-%OUTERPROD    Outer product of a matrix and a vector, or a vector and a 
-%             matrix, all discrete data.
+%OUTERPROD   Outer product 
+%   OUTERPROD(A, B) computes outer product of the matrix A and the vector B
+%   or a vector A and a matrix B. Both A and B are discrete.
 %
-%   Example
+%   Example:
 %   A = rand(4,1); 
 %   B = rand(3,2);
 %   T = outerProd(A, B);       % T will be 4 x 1 x 3 x 2.
-%   See also CHEBFUN3/TXM.
+%
+% See also CHEBFUN3/TXM.
 
 % The structure of this code is similar to `ttt.m` from the HTUCKER toolbox
 % of Tobler and Kressner.
@@ -25,11 +27,13 @@ sizeB = size(B);
 sizeB(end+1:ndimsB) = 1;
 
 % Vectorize both input matrices:
-%vecA = chebfun3.unfold(A, [1:ndimsA], []);
+% Call chebfun3.unfold:
 vecA = A(:);
+% The same as vecA = chebfun3.unfold(A, [1:ndimsA], []);
 
-%vecB = chebfun3.unfold(B, [1:ndimsB], []);
+% Call chebfun3.unfold:
 vecB = B(:);
+% The same as vecB = chebfun3.unfold(B, [1:ndimsB], []);
 
 % Calculate matricization of T_mat, i.e., T_mat = vecA * vecB.'
 % The outer product is performed in the vector level.

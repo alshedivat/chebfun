@@ -1,8 +1,12 @@
 function varargout = length(F)
-%LENGTH   Length of a CHEBFUN3
-%   The number of Chebyshev coefficients in each of the directions. If 
-%   just one output has been asked, then it is the max number of 
-%   coefficients in three dimensions.
+%LENGTH   Length of a CHEBFUN3.
+%   [M, N, P] = LENGTH(F) returns the numbers M, N and P of Chebyshev 
+%   (or Fourier) coefficients of the CHEBFUN3 object F in variable X, Y 
+%   and Z, respectively. 
+%
+%   LENGTH(F) returns just the maximum of M, N and P.
+%
+% See also CHEBFUN3/SIZE.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
@@ -29,11 +33,11 @@ end
 m = length(F.cols);
 n = length(F.rows);
 p = length(F.tubes);
+
 % Output:
 if ( nargout <= 1 )
     varargout = {max([m, n, p])};
 else
-    % ST decomposition
     varargout = {m, n, p};
 end
 

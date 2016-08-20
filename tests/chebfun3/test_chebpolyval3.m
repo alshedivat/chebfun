@@ -1,5 +1,5 @@
 function pass = test_chebpolyval3()
-% Check the chebpolyval3 commands in CHEBFUN3
+% Check the chebpolyval3 command in CHEBFUN3
 
 if ( nargin < 1 ) 
     pref = chebfunpref; 
@@ -16,5 +16,5 @@ pass(1) = norm(exactVals(:) - constructorVals(:)) < 10*tol;
 A = rand(3, 4, 5);
 f = chebfun3(A);
 B = chebpolyval3(f);
-pass(2) = ( norm(A(:) - B(:)) < tol);
+pass(2) = norm(A(:) - B(:)) < tol;
 end

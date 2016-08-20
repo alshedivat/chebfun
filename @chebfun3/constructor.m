@@ -1,9 +1,8 @@
 function f = constructor(f, op, varargin)
 %CONSTRUCTOR   CHEBFUN3 constructor.
-%
 %   Given a function OP of three variables, this code represents it as a 
-%   CHEBFUN3 objects. A CHEBFUN3 object is a low rank representation and 
-%   expresses a function as a trilinear product of a discrete core tensor 
+%   CHEBFUN3 object. A CHEBFUN3 object is a low-rank representation
+%   expressing a function as a trilinear product of a discrete core tensor 
 %   and three quasimatrices consisting of univariate functions.
 %
 %   The algorithm for constructing a CHEBFUN3 has three phases:
@@ -12,9 +11,8 @@ function f = constructor(f, op, varargin)
 %   separation rank of the function. At the end of this stage we have 
 %   candidate 3D pivot locations, 3D pivot values, skeleton slices and 
 %   fibers. It also identifies the skeleton columns and rows of each slice.
-%   To do so, it uses multivariate adaptive cross approximation (MACA) 
-%   which is iterated until 3D pivot elements fall below machine epsilon.  
-%   The output is already in the block term decomposition (BTD) form.
+%   To do so, it uses multivariate adaptive cross approximation (MACA).
+%   The output of Phase 1 has the form of block term decomposition (BTD).
 %
 %   PHASE 2: The second phase attempts to resolve the corresponding 
 %   skeleton columns, rows and tubes by sampling along the fibers and 
@@ -24,13 +22,13 @@ function f = constructor(f, op, varargin)
 %   PHASE 3: The third phase attempts to recompress the BTD form into
 %   Tucker format. This step is not an adaptive process. 
 %
-% See also CHEBFUN2.
+% See also CHEBFUN2, CHEBFUN3T and CHEBFUN3V.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
 
 % Parse the inputs:
-[op, dom, pref, vscaleBnd, fiberDim, vectorize, isEqui, fixedRank] = ...
+[op, dom, pref, fiberDim, vectorize, isEqui, fixedRank] = ...
     parseInputs(op, varargin{:});
 
 % Set preferences:
@@ -40,9 +38,9 @@ grid            = tpref.minSamples;
 maxSample       = tpref.maxLength; % This is the maxSample used in Phase II.
 maxSamplePhase1 = 363; % maxSample in Phase I where we explicitly generate 
 % order-3 tensors.
-maxRank = pref.cheb3Prefs.maxRank;
-pseudoLevel = pref.cheb3Prefs.chebfun3eps;
 prefStruct = pref.cheb3Prefs;
+maxRank = prefStruct.maxRank;
+pseudoLevel = prefStruct.chebfun3eps;
 passSampleTest = prefStruct.sampleTest;
 
 if ( isa(op, 'chebfun3') )     % CHEBFUN3( CHEBFUN3 )
@@ -52,15 +50,14 @@ elseif ( isa(op, 'double') )   % CHEBFUN3( DOUBLE )
     f = constructFromDouble(op, dom, pref, isEqui);
     if ( fixedRank )
         % Simplify the rank if requested.
-        f = simplify(f , 'rank', fixedRank);
+        f = fixTheRank(f , fixedRank);
     end
     return
 end
 
-%% Dimension clustering of Bebendorf & Kuske.
-% An example where this is important. compare3(@(x,y,z) exp(-5*(x+2*y).^2-30*y.^4-7*sin(2*z).^6));
+%% Dimension clustering
 if ( isempty(fiberDim) )
-    fiberDim = dimCluster(op, dom, vectorize);
+    fiberDim = dimCluster(op, dom, vectorize, pref);
 end
 if ( fiberDim == 1 )
     op = @(y,z,x) op(x,y,z);
@@ -74,7 +71,10 @@ failure = 0;     % Reached max discretization size without being happy.
 
 while ( ~isHappy && ~failure )
     %% Main loop of the constructor
-    [xx, yy, zz] = points3D(grid, grid, grid, dom, pref);
+    out = tech.tensorGrid([grid, grid, grid], dom);
+    xx = out{1};
+    yy = out{2};
+    zz = out{3};
     grid2D = grid;
     vals = evaluate(op, xx, yy, zz, vectorize);
     % We have vals(i,j,k) = op(X(i), Y(j), Z(k)), where                 (*)
@@ -82,8 +82,8 @@ while ( ~isHappy && ~failure )
     %                                           Y = chebpts(n,[c,d]);
     %                                           Z = chebpts(p,[e,g]);
     %                                 [xx, yy, zz] = ndgrid(X, Y, Z);
-    % and ndgrid is used here in ``points3D``.
-    % If we have used meshgrid, instead of ndgrid, in ``points3D``, then 
+    % and ndgrid is used here in ``tensorGrid``.
+    % If we have used meshgrid, instead of ndgrid, in ``tensorGrid``, then 
     % what holds, instead of (*) above, is 
     % vals(i,j,k) = op(X(j), Y(i), Z(k)) which can be confusing.
     % Users who want to create a chebfun3 from a DISCRETE tensor of values 
@@ -103,43 +103,42 @@ while ( ~isHappy && ~failure )
     factor = 2*sqrt(2); % Ratio between width of tensor and rank (=no. of pivots).
     % 3D version of CHEBFUN's tolerance: to be used in the ACA for pivot
     % size.
-    [relTol, absTol] = getTol3D(xx, yy, zz, vals, grid, dom, pseudoLevel, ...
-        vscaleBnd);
-    pref.chebfuneps = relTol; % tolerance to be uses in happinessCheck via 
-    % standardCheck.
+    [relTol, absTol] = getTol3D(xx, yy, zz, vals, grid, dom, pseudoLevel);
+    pref.chebfuneps = relTol; % tolerance to be used in happinessCheck.
     
     %% PHASE 1: %%
     % Apply 3D ACA to tensor of values
     [colsValues, rowsValues, pivotVals2D, pivotIndices2D, fibersValues, ...
         pivotVals3D, pivotIndices3D, iFail3D, iFail2D] = completeACA3D(...
-        vals, fiberDim, absTol, factor, dom, pref);
+        vals, absTol, factor, dom, pref);
     
-    strike = 1;
-    while ( (iFail3D || iFail2D) && grid < maxSamplePhase1 && strike < 3)
+    while ( (iFail3D || iFail2D) && grid < maxSamplePhase1 )
         % Refine sampling on tensor grid:
         if ( iFail3D )
             grid = gridRefinePhase1(grid, pref);
-            [xx, yy, zz] = points3D(grid, grid, grid, dom, pref);
+            out = tech.tensorGrid([grid, grid, grid], dom);
+            xx = out{1};
+            yy = out{2};
+            zz = out{3};
         elseif ( iFail2D )
             grid2D = gridRefinePhase1(grid2D, pref);
-            [xx, yy, zz] = points3D(grid2D, grid2D, grid, dom, pref);
+            % TODO: Do we need a bound on grid2D?
+            out = tech.tensorGrid([grid2D, grid2D, grid], dom);
+            xx = out{1};
+            yy = out{2};
+            zz = out{3};
         end
         
         vals = evaluate(op, xx, yy, zz, vectorize); % Resample
-        vscale = max(abs(vals(:)));
         % New tolerance:
         [relTol, absTol] = getTol3D(xx, yy, zz, vals, grid, dom, ...
-            pseudoLevel, vscaleBnd);
+            pseudoLevel);
         pref.chebfuneps = relTol;
         
         % New 3D ACA:
         [colsValues, rowsValues, pivotVals2D, pivotIndices2D, ...
             fibersValues, pivotVals3D, pivotIndices3D, iFail3D, iFail2D] ...
-            = completeACA3D(vals, fiberDim, absTol, factor, dom, pref);
-        % If the function is 0+noise then stop after three strikes.
-        if ( abs(pivotVals3D(1))<1e4*absTol/vscale )
-            strike = strike + 1;
-        end
+            = completeACA3D(vals, absTol, factor, dom, pref);
     end
     
     % If the rank of the function is above maxRank then stop.
@@ -174,6 +173,7 @@ while ( ~isHappy && ~failure )
                 yy(1,pivotIndices2D{k}(:, 2), 1).'];
         end
         PI2D = pivotIndices2D;
+        diagValues2D = cell(sepRank, 1);
         for k=1:sepRank
             diagValues2D{k} = diag(1./pivotVals2D{k});
         end
@@ -194,14 +194,11 @@ while ( ~isHappy && ~failure )
         if ( ~resolvedTubs )
             % Double sampling along skeleton tubes
             [p, nesting] = gridRefinePhase2(p, pref);
-            Z = mypoints(p, dom(5:6), pref);
+            Z = tech.tensorGrid(p, dom(5:6));
             fibersValues = zeros(p, sepRank);
             for k=1:sepRank
                 [xx, yy, zz] = ndgrid(pivPos3D(k, 1), pivPos3D(k, 2), Z);
                 fibersValues(:,k) = squeeze(evaluate(op, xx, yy, zz, vectorize));
-                % An alternative is the following, which does
-                % not form xx, yy and zz, but might be easier to read.
-                %fibersValues(:,k) = evaluate(op, repmat(pivPos3D(k, 1),p,1), repmat(pivPos3D(k, 2),p,1), Z, vectorize ).';
             end
             
             % Find location of pivots on new grid  (using nesting property).
@@ -209,7 +206,7 @@ while ( ~isHappy && ~failure )
             % z indices and should therefore be updated.
         else
             fibersValues = zeros(p, sepRank);
-            Z = mypoints(p, dom(5:6), pref);
+            Z = tech.tensorGrid(p, dom(5:6));
             for k=1:sepRank
                 [xx, yy, zz] = ndgrid(pivPos3D(k, 1), pivPos3D(k, 2), Z);
                 fibersValues(:, k) = squeeze(evaluate(op, xx, yy, zz, vectorize));
@@ -219,8 +216,8 @@ while ( ~isHappy && ~failure )
         if ( ~resolvedCols && resolvedRows )
             % Double sampling along the column slices only, i.e., in x. 
             [m, nesting] = gridRefinePhase2(m, pref); 
-            X = mypoints(m, dom(1:2), pref);
-            Y = mypoints(n, dom(3:4), pref);
+            X = tech.tensorGrid(m, dom(1:2));
+            Y = tech.tensorGrid(n, dom(3:4));
             colsValues = {};
             for k=1:sepRank
                 [xx, yy, zz] = ndgrid(X, pivPos2D{k}(:,2), pivPos3D(k, 3));
@@ -236,16 +233,15 @@ while ( ~isHappy && ~failure )
             % Find location of 3D pivots on new grid  (using nesting property).
             PI3D(:, 1) = nesting(PI3D(:, 1)); % The 1st column of PI3D contains x
             % indices and should therefore be updated.
-            % Find location of 2D pivots on new grid  (using nesting property).                 
+	    % Find location of 2D pivots on new grid  (using nesting property).
             for k = 1:sepRank
                 PI2D{k}(:,1) = nesting(PI2D{k}(:, 1));
             end
             
         elseif ( resolvedCols && ~resolvedRows )
             [n, nesting] = gridRefinePhase2(n, pref);
-            X = mypoints(m, dom(1:2), pref);
-            Y = mypoints(n, dom(3:4), pref);
-
+            X = tech.tensorGrid(m, dom(1:2));
+            Y = tech.tensorGrid(n, dom(3:4));
             colsValues = {};
             for k=1:sepRank
                 [xx, yy, zz] = ndgrid(X, pivPos2D{k}(:, 2), pivPos3D(k, 3));
@@ -267,9 +263,8 @@ while ( ~isHappy && ~failure )
         elseif ( ~resolvedCols && ~resolvedRows )
             [m, nesting1] = gridRefinePhase2(m, pref);
             [n, nesting2] = gridRefinePhase2(n, pref);
-            X = mypoints(m, dom(1:2), pref);
-            Y = mypoints(n, dom(3:4), pref);
-            
+            X = tech.tensorGrid(m, dom(1:2));
+            Y = tech.tensorGrid(n, dom(3:4));
             colsValues = {};
             for k=1:sepRank
                 [xx, yy, zz] = ndgrid(X, pivPos2D{k}(:, 2), pivPos3D(k, 3));
@@ -355,29 +350,32 @@ while ( ~isHappy && ~failure )
         end
         
         %% 3D HAPPINESSCHECK again only on non-happy fibers:
-        fiber1Data.hscale = norm(dom(1:2), inf);
-        fiber1Data.vscale = max(abs(colsValues{1}(:)));
+        colsData.hscale = norm(dom(1:2), inf);
+        colsData.vscale = max(abs(colsValues{1}(:)));        
         if ( ~resolvedCols )
-            colsChebtech = tech.make(sum(colsValues{1}, 2), fiber1Data);
-            resolvedCols  = happinessCheck(colsChebtech ,[], ...
-                sum(colsValues{1}, 2), [], pref);
+            colsChebtech = tech.make(colsValues{1}, colsData);
+            colsChebtech.coeffs = sum(abs(colsChebtech.coeffs), 2);
+            resolvedCols  = happinessCheck(colsChebtech, [], ...
+                colsChebtech.coeffs, [], pref);
         end
-
-        fiber2Data.hscale = norm(dom(3:4), inf);
-        fiber2Data.vscale = max(abs(rowsValues{1}(:)));
+        
+        rowsData.hscale = norm(dom(3:4), inf);
+        rowsData.vscale = max(abs(rowsValues{1}(:)));
         if ( ~resolvedRows )
-            rowsChebtech = tech.make(sum(rowsValues{1}, 2), fiber2Data);
+            rowsChebtech = tech.make(rowsValues{1}, rowsData);
+            rowsChebtech.coeffs = sum(abs(rowsChebtech.coeffs), 2);
             resolvedRows  = happinessCheck(rowsChebtech, [], ...
-                sum(rowsValues{1}, 2), [], pref);
+                rowsChebtech.coeffs, [], pref);
         end
 
-        fiber3Data.hscale = norm(dom(5:6), inf);
-        fiber3Data.vscale = max(abs(fibersValues(:)));
-        if ( ~resolvedTubs )
-            fiber3Chebtech = tech.make(sum(fibersValues, 2), fiber3Data);
+        tubesData.hscale = norm(dom(5:6), inf);
+        tubesData.vscale = max(abs(fibersValues(:)));
+        if ( ~resolvedTubs )          
+            fiber3Chebtech = tech.make(fibersValues, tubesData);
+            fiber3Chebtech.coeffs = sum(abs(fiber3Chebtech.coeffs), 2);
             resolvedTubs  = happinessCheck(fiber3Chebtech, [], ...
-                sum(fibersValues, 2), [], pref);
-        end        
+                fiber3Chebtech.coeffs, [], pref);
+        end
         isHappy = resolvedCols & resolvedRows & resolvedTubs;
         
         if ( ~resolvedCols )
@@ -421,13 +419,8 @@ while ( ~isHappy && ~failure )
     % BTD2Tucker compression. N.B.: This is a non-adaptive step in the
     % sense that it works with a fixed BTD.
     if ( (isHappy) || (failure) )
-        dom2D = dom(1:4); % The first 4 entries correspond to slices
         [core, colsValues, rowsValues] = btd2tucker(colsValues, ...
-            rowsValues, diagValues2D, pivotVals3D, dom2D, pref, absTol);
-        % To check the validity of the new representation try the
-        % following:
-        % TuckerApprox = txm(txm(txm(core, colsValues, 1), rowsValues, 2), fibersValues, 3);
-        % norm123 = norm( vals(:) -  TuckerApprox(:) )
+            rowsValues, diagValues2D, pivotVals3D, absTol);
     end
     
     % Construct a CHEBFUN3 object, simplify skeletons and call a
@@ -437,8 +430,7 @@ while ( ~isHappy && ~failure )
     f.tubes = chebfun(fibersValues, dom(5:6), pref);    
     f.cols = simplify(f.cols, pref.chebfuneps, 'globaltol');
     f.rows = simplify(f.rows, pref.chebfuneps, 'globaltol');
-    f.tubes = simplify(f.tubes, pref.chebfuneps, 'globaltol');
-    
+    f.tubes = simplify(f.tubes, pref.chebfuneps, 'globaltol');  
     f.core = core;
     f.domain = dom;
     
@@ -466,25 +458,21 @@ elseif ( fiberDim == 2 )
     % [2 3 1] brings the original [3 1 2] permutation back to [1 2 3].
 end
 
-if ( fixedRank )
-    % Simplify the rank if asked. This truncates using HOSVD.
-    f = simplify(f , 'rank', fixedRank);
+if ( all(fixedRank) )
+    % Truncate if requested.
+    f = fixTheRank(f , fixedRank);
 end
 
 end
 %% End of constructor
 
 function [core, colsTucker, rowsTucker] = btd2tucker(colsValues, ...
-    rowsValues, diagValues2D, pivotVals3D, dom2, pref, absTol)
+    rowsValues, diagValues2D, pivotVals3D, absTol)
 allCols = []; 
 allRows = []; 
 allDiags = [];
 nn = numel(pivotVals3D);
 sizeIndex = zeros(nn, 1);
-pseudoLevel = pref.cheb3Prefs.chebfun3eps;
-
-globalTolCols = absTol; % Like the tolerance used to stop adding new fibers in the Phase 1 in 3D ACA
-globalTolRows = absTol;
 
 for kkk = 1:nn
     sizeIndex(kkk) = size(rowsValues{kkk}, 2);
@@ -494,25 +482,23 @@ for kkk = 1:nn
 end
 sizeIndex = cumsum([0; sizeIndex]);
         
-% Compress U and V:
-if size(allCols,2)>1
-    [colsTucker, Su, Vu] = chebfun2ACA(allCols, dom2, pref, ...
-        [], globalTolCols); % the 0-flag is used because the tolerance in 
-    % chebfun2ACA should be computed differently from the case where the 
-    % input matrix is actually vals in chebpts. Here, columns of allCols do
-    % not depend on chebpts in that same way because of the way we created 
-    % allCols is just by appending all the columns of colsValues. The same 
-    % is true for allRows. If we compute tol in the same way as function 
-    % values, then the accuracy unreasonably decreases compared to the 
-    % slice decomposition.
+% Compress allCols and allRows:
+if ( size(allCols, 2) > 1 )
+    [Su, ~, Vu, colsTucker] = completeACA2D(allCols, absTol, 0);
+    % factor = 0, because we want the ACA to be applied even if op is not 
+    % low-rank. In contrast to Chebfun2, we now have 
+    % allCols = colsTucker * diag(1./Su) * Vu'.
+    % Moreover, we use the same absTol to chop columns, the same tolerance
+    % used to chop fibers so that ranks are less inconsistent for symmetric
+    % functions.
     Vu = Vu*diag(1./Su);
 else
-    colsTucker = allCols; Vu = 1;
+    colsTucker = allCols; 
+    Vu = 1;
 end
 
-if size(allRows,2)>1
-    [rowsTucker,Sv,Vv] = chebfun2ACA(allRows, dom2, pref, ...
-        [], globalTolRows);
+if ( size(allRows, 2) > 1 )
+    [Sv, ~, Vv, rowsTucker] = completeACA2D(allRows, absTol, 0);
     Vv = Vv*diag(1./Sv);
 else
     rowsTucker = allRows; 
@@ -535,35 +521,7 @@ end
 end
 
 %%
-function tol = GetTol2D(xx, yy, vals, dom, pseudoLevel)
-% GETTOL2D     Calculate a tolerance like the one in the Chebfun2 constructor.
-%
-%  This is the 2D analogue of the tolerance employed in the chebtech
-%  constructors. It is based on a finite difference approximation to the
-%  gradient, the size of the approximation domain, the internal working
-%  tolerance, and an arbitrary (2/3) exponent. 
-
-[m, n] = size(vals);
-grid = max(m, n);
-
-if ( n == 1 ) % f is probably rank-1, i.e., vals depend only on one of the variables
-    df = diff(vals, 1, 1) ./ diff(xx, 1, 1); 
-    Jac_norm = max( abs(df(:)) );
-else % f probably has a higher rank than 1
-    % Remove some edge values so that df_dx and df_dy have the same size. 
-    % xx is generated by ndgrid, i.e., xx changes in the first mode:
-    dfdx = diff(vals(:,1:n-1), 1, 1) ./ diff(xx(:, 1:n-1), 1, 1); 
-    % yy is generated by ndgrid, i.e., yy changes row-wise (2nd mode):
-    dfdy = diff(vals(1:m-1,:), 1, 2) ./ diff(yy(1:m-1, :), 1, 2);
-    % An approximation for the norm of the gradient over the whole domain.
-    Jac_norm = max( max( abs(dfdx(:)), abs(dfdy(:)) ) );
-end
-vscale = max(abs(vals(:)));
-tol = grid^(4/5) * max(abs(dom(:))) * max(Jac_norm^(5/8), vscale) * pseudoLevel;
-
-end
-%%
-function tol = GetTol2Dv2(xx, yy, vals, dom, pseudoLevel)
+function absTol = GetTol2D(xx, yy, vals, dom, pseudoLevel)
 % GETTOL2D   Calculate a tolerance for the Chebfun2 constructor.
 %
 %  This is the 2D analogue of the tolerance employed in the chebtech
@@ -573,49 +531,31 @@ function tol = GetTol2Dv2(xx, yy, vals, dom, pseudoLevel)
 
 [m, n] = size(vals); 
 grid = max(m, n);
+relTol = grid^(4/5) * pseudoLevel; % this should be vscale and hscale invariant
 
 % Remove some edge values so that df_dx and df_dy have the same size. 
 % xx is generated by ndgrid, i.e., xx changes in the first mode:
-dfdx = diff(vals(:,1:n-1),1,1) ./ diff(xx(:,1:n-1),1,1);
+dfdx = diff(vals(:, 1:n-1), 1, 1) ./ diff(xx(:, 1:n-1), 1, 1);
 % yy is generated by ndgrid, i.e., yy changes row-wise (2nd mode):
-dfdy = diff(vals(1:m-1,:),1,2) ./ diff(yy(1:m-1,:),1,2);
+dfdy = diff(vals(1:m-1, :), 1, 2) ./ diff(yy(1:m-1, :), 1, 2);
+gradNorms = [max(abs(dfdx(:))), max(abs(dfdy(:)))];
+% A vector of gradient information over the domain.
+if ( isempty(gradNorms) )
+    % This happens if the input in not a trivariate function.
+    gradNorms = 1;
+end
 
-% An approximation for the norm of the gradient over the whole domain.
-Jac_norm = max(max(abs(dfdx(:)), abs(dfdy(:))));
 vscale = max(abs(vals(:)));
-tol = grid^(4/5) * max(abs(dom(:))) * max(Jac_norm, vscale) * pseudoLevel;
-end
-
-
-%%
-function [col, pivotVals, row, pivotLoc] = chebfun2ACA(op, dom, pref, ...
-    flag_funVals, globalTol)
-
-pseudoLevel = pref.cheb3Prefs.chebfun3eps;
-if ( ~isempty(globalTol) )
-    tol = globalTol;
-else
-    if flag_funVals
-        [xx2D, yy2D] = points2D(size(op,1), size(op,2), dom, pref); 
-        % ndgrid is used here.
-        tol = GetTol2D(xx2D, yy2D, op, dom, pseudoLevel);
-    else
-        vscale = max(abs(op(:)));
-        tol = length(op)^(3/4) * max(abs(dom(:))) * vscale * pseudoLevel;
-    end
-end
-
-% Perform GE with complete pivoting:
-[pivotVals, pivotLoc, row, col] = completeACA2D(op, tol, 0); % factor = 0, because we want the ACA to be applied even if op is not low-rank.
-% In contrast to Chebfun2, we now have op = col*diag(1./pivotVals)*row'.
+domDiff = [diff(dom(1:2)) diff(dom(3:4))];
+absTol = max(max(gradNorms.*domDiff), vscale) * relTol;
 end
 
 %%
-function [col, pivotVals, row, pivotLoc, ifail2D] = chebfun2ACAv2(op, ...
+function [col, pivotVals, row, pivotLoc, ifail2D] = chebfun2ACA(op, ...
     tol, factor)
 % Perform GE with complete pivoting:
 
-if factor ~= 0
+if ( factor ~= 0 )
     % FACTOR in the 3D steps is either 0 (in case of constructionFromDoubles) 
     % or 2sqrt(2) otherwise. For 2D steps however, we are happy with 
     % FACTOR = 0 or 2 as in Chebfun2. This IF conditional, makes it
@@ -644,18 +584,17 @@ ifail2D = 1;                  % Assume we fail.
 
 % Main algorithm
 zRows = 0;                  % count number of zero cols/rows.
-[infNorm, ind] = max( abs ( reshape(A,numel(A),1) ) );
-[row, col] = chebfun3.myind2sub( size(A) , ind);
+[infNorm, ind] = max(abs(reshape(A, numel(A), 1)));
+[row, col] = chebfun3.myind2sub(size(A) , ind);
 
 % Bias toward diagonal for square matrices (see reasoning below):
-if ( ( nx == ny ) && ( max( abs( diag( A ) ) ) - infNorm ) > -tol )
-    [infNorm, ind] = max( abs ( diag( A ) ) );
+if ( ( nx == ny ) && ( max(abs(diag(A))) - infNorm) > -tol )
+    [infNorm, ind] = max(abs(diag(A)));
     row = ind;
     col = ind;
 end
 
 scl = infNorm;
-
 % If the function is the zero function
 if ( scl == 0 )
     pivotValue = 0;
@@ -670,27 +609,27 @@ end
 while ( ( infNorm > tol ) && ( zRows < width / factor) ...
         && ( zRows < min(nx, ny) ) )
 
-    cols(:,zRows+1) = A(:,col);             % Extract skeleton columns
-    rows(zRows+1,:) = A(row,:);             % Extract skeleton rows
-    PivVal = A(row,col);
-    A = A - cols(:,zRows+1)*(rows(zRows+1,:)./PivVal); % One step of GE
+    cols(:, zRows+1) = A(:, col);             % Extract skeleton columns
+    rows(zRows+1, :) = A(row, :);             % Extract skeleton rows
+    PivVal = A(row, col);
+    A = A - cols(:, zRows+1)*(rows(zRows+1,:)./PivVal); % One step of GE
     
     % Keep track of progress.
     zRows = zRows + 1;                       % One more row is interpolated
     pivotValue(zRows) = PivVal;              % Store value of 2D pivot
-    pivotElement(zRows,:)=[row col];         % Store index of 2D pivot
+    pivotElement(zRows, :)=[row col];        % Store index of 2D pivot
     
     % Find value and index of next 2D pivot
-    [ infNorm , ind ] = max( abs ( A(:) ) ); % Slightly faster
-    [ row , col ] = chebfun3.myind2sub( size(A) , ind );
+    [infNorm, ind] = max(abs(A(:))); % Slightly faster
+    [row, col] = chebfun3.myind2sub(size(A), ind);
     
     % Have a bias towards the diagonal of A, so that it can be used as a test
     % for nonnegative definite functions. (Complete GE and Cholesky are the
     % same as nonnegative definite functions have an absolute maximum on the
     % diagonal, except there is the possibility of a tie with an off-diagonal
     % absolute maximum. Bias toward diagonal maxima to prevent this.)
-    if ( ( nx == ny ) && ( max( abs( diag( A ) ) ) - infNorm ) > -tol )
-        [infNorm, ind] = max( abs ( diag( A ) ) );
+    if ( ( nx == ny ) && ( max(abs(diag(A))) - infNorm) > -tol )
+        [infNorm, ind] = max(abs(diag(A)));
         row = ind;
         col = ind;
     end
@@ -703,7 +642,7 @@ if ( zRows >= (width/factor) )
     ifail2D = 1;                               % We did fail in 2D ACA
 end
 
-rows = rows.';                                % To unify all the columns, 
+rows = rows.';                               % To unify all the columns, 
                                              % rows and tubes, store 
                                              % skeleton rows also as column 
                                              % vectors.
@@ -711,115 +650,31 @@ end
 
 %%
 function [relTol, absTol] = getTol3D(xx, yy, zz, vals, grid, dom, ...
-    pseudoLevel, vscaleBnd)
-%See https://github.com/chebfun/chebfun/issues/1491
+    pseudoLevel)
 
 relTol = 2*grid^(4/5) * pseudoLevel; % this should be vscale and hscale invariant
 vscale = max(abs(vals(:)));
-
-if ( isempty(vscaleBnd) )
-    [m,n,p] = size(vals);
-    % Remove some edge values so that df_dx, df_dy and df_dz have the same size. 
-    % xx changes in the first mode:
-    df_dx = diff(vals(:, 1:n-1, 1:p-1), 1, 1) ./ diff(xx(:, 1:n-1, 1:p-1), 1, 1);
-    % yy changes row-wise (2nd mode):
-    df_dy = diff(vals(1:m-1, :, 1:p-1), 1, 2) ./ diff(yy(1:m-1, :, 1:p-1), 1, 2);
-    % zz changes tube-wise (3rd mode):
-    df_dz = diff(vals(1:m-1, 1:n-1, :), 1, 3) ./ diff(zz(1:m-1, 1:n-1, :), 1, 3);
-    J = max(max(abs(df_dx),abs(df_dy)), abs(df_dz));
-    Jac_norm = max(J(:)); % An approximation for the norm of the Jacobian over the whole domain.
-    absTol =  max(abs(dom(:))) * max(Jac_norm, vscale) * relTol;
-else % If we have a binary operation and vscale of both operand are 
-    % available in the vector vscaleBnd. 
-    kappa = sum(vscaleBnd)/vscale; % condition number of the plus operation 
-    % f + g is ||f|| + ||g|| / ||f+g||. 
-    absTol = max(abs(dom(:))) * max(kappa, vscale) * relTol;
-    % Since kappa is big, if g ~= -f, this helps us find out cases prone to 
-    % cancellation errors, i.e., in this case we expect less from the
-    % constructor. How less is exactly according to how much cancellation
-    % there might be. Check e.g. the value of kappa for f+g with
-    % f = chebfun3(@(x,y,z) x ); g = f-0.9*f;
-    % and
-    % f = chebfun3(@(x,y,z) x ); g = f-0.99999999*f;
+[m,n,p] = size(vals);
+% Remove some edge values so that df_dx, df_dy and df_dz have the same size. 
+% xx changes in the first mode:
+df_dx = diff(vals(:, 1:n-1, 1:p-1), 1, 1) ./ diff(xx(:, 1:n-1, 1:p-1), 1, 1);
+% yy changes row-wise (2nd mode):
+df_dy = diff(vals(1:m-1, :, 1:p-1), 1, 2) ./ diff(yy(1:m-1, :, 1:p-1), 1, 2);
+% zz changes tube-wise (3rd mode):
+df_dz = diff(vals(1:m-1, 1:n-1, :), 1, 3) ./ diff(zz(1:m-1, 1:n-1, :), 1, 3);
+gradNorms = [max(abs(df_dx(:))), max(abs(df_dy(:))), max(abs(df_dz(:)))];
+% A vector of gradient information over the domain.
+if ( isempty(gradNorms) )
+    % This happens if the input in not a trivariate function in which case
+    % we basically disable using gradient information:
+    gradNorms = 1;
 end
-
-end
-
-%%
-function x = mypoints(n, dom, pref)
-% Get the sample points that correspond to the right grid for a particular
-% technology.
-
-% What tech am I based on?:
-tech = pref.tech();
-
-if ( isa(tech, 'chebtech2'))
-    x = chebpts(n, dom, 2);
-elseif ( isa(tech, 'chebtech1'))
-    x = chebpts(n, dom, 1);
-elseif ( isa(tech, 'trigtech'))
-    x = trigpts(n, dom);
-else
-    error('CHEBFUN:CHEBFUN3:constructor:mypoints:techType', ...
-        'Unrecognized technology');
-end
-
-end
-
-%%
-function [xx, yy] = points2D(m, n, dom, pref)
-% Get the sample points that correspond to the right grid for a particular
-% technology.
-
-% What tech am I based on?:
-tech = pref.tech();
-
-if ( isa(tech, 'chebtech2') )
-    x = chebpts(m, dom(1:2), 2);   % x grid.
-    y = chebpts(n, dom(3:4), 2);   % y grid.
-    [xx, yy] = ndgrid(x, y);
-elseif ( isa(tech, 'chebtech1'))
-    x = chebpts(m, dom(1:2), 1);   % x grid.
-    y = chebpts(n, dom(3:4), 1);   % y grid.
-    [xx, yy] = ndgrid(x, y);
-elseif ( isa(tech, 'trigtech'))
-    x = trigpts(m, dom(1:2));   % x grid.
-    y = trigpts(n, dom(3:4));   % y grid.
-    [xx, yy] = ndgrid(x, y);
-else
-    error('CHEBFUN:CHEBFUN3:constructor:points2D:tecType', ...
-        'Unrecognized technology');
-end
-
-end
-
-%%
-function [xx, yy, zz] = points3D(m, n, p, dom, pref)
-% Get the sample points that correspond to the right grid for a particular
-% technology.
-
-% What tech am I based on?:
-tech = pref.tech();
-
-if ( isa(tech, 'chebtech2') )
-    x = chebpts(m, dom(1:2), 2);   % x grid.
-    y = chebpts(n, dom(3:4), 2);   % y grid.
-    z = chebpts(p, dom(5:6), 2);   % z grid.
-    [xx, yy, zz] = ndgrid(x, y, z); 
-elseif ( isa(tech, 'chebtech1') )
-    x = chebpts(m, dom(1:2), 1);   % x grid.
-    y = chebpts(n, dom(3:4), 1);   % y grid.
-    z = chebpts(p, dom(5:6), 1);   % z grid.
-    [xx, yy, zz] = ndgrid(x, y, z); 
-elseif ( isa(tech, 'trigtech') )
-    x = trigpts(m, dom(1:2));   % x grid.
-    y = trigpts(n, dom(3:4));   % y grid.
-    z = trigpts(p, dom(5:6));   % z grid.
-    [xx, yy, zz] = ndgrid(x, y, z);
-else
-    error('CHEBFUN:CHEBFUN3:constructor:points3D:tecType', ...
-        'Unrecognized technology');
-end
+domDiff = [diff(dom(1:2)) diff(dom(3:4)) diff(dom(5:6))];
+absTol = max(max(gradNorms.*domDiff), vscale) * relTol;
+% absTol should depend on the vscale of the function while it also uses
+% derivative information to prevent issues like the one mentioned in
+% https://github.com/chebfun/chebfun/issues/1491.
+    
 end
 
 %%
@@ -844,14 +699,19 @@ if ( flag ==1 )
         for ii = 1:size(xx, 1)
             for jj = 1:size(yy, 2)
                 for kk = 1:size(zz, 3)
-                    vals(ii, jj, kk) = oper(xx( ii, 1, 1) , ...
-                        yy(1, jj, 1 ), zz(1, 1, kk));
+                    vals(ii, jj, kk) = feval(oper, xx( ii, 1, 1), ...
+                        yy(1, jj, 1 ), zz(1, 1, kk));                    
                 end
             end
         end
     end
 else % i.e., if (flag == 0)
     vals = feval(oper, xx, yy, zz);  % Tensor or vector of values at cheb3 pts.
+    if ( size(vals) ~= size(xx) )
+        % Necessary especially when a CHEBFUN2 is made out of a CHEBFUN3,
+        % e.g. in CHEBFUN3/STD.
+        vals = vals.';
+    end
 end
 
 end
@@ -909,104 +769,57 @@ end
 end
 
 %%
-function fiberDim = dimCluster(f, d, vectorize)
-% Dimension clustering from
-% M. Bebendorf, C. Kuske, Separation of variables for function generated 
-% high-order tensors, Journal of Scientific Computing 61 (2014) 145-165.
-%
-% The cost is to computing 7 triple integrals. To do this fast, we use 
-% Halton points.
+function fiberDim = dimCluster(op, dom, vectorize, pref)
+% Choose the right dimension for clustering in Phase 1. The 3 steps are as
+% follows: 
+% 1) Sample OP at a small tensor.
+% 2) Compare all the three modal ranks and find which rank might be the
+%    smallest. We are trying to avoid using lots of points that we need in 
+%    the technique by Bebendorf and Kuske.
+% 3) If there are more than one minimal rank, find the variable that needs
+%    more coefficients to resolve.
 
-% Generate Halton points to be used.
-numpts = 1e4;
-[xx, yy, zz] = halton(numpts, d);
+grid = 10;
+tech = pref.tech();
+out = tech.tensorGrid([grid, grid, grid], dom);
+xx = out{1};
+yy = out{2};
+zz = out{3};
+vals = evaluate(op, xx, yy, zz, vectorize);
 
-% Compute the expected values.
-mu_denom = @(x,y,z) (f(x,y,z)).^2;
-QM_approx_denom = inegral_QM2(evaluate(mu_denom, xx, yy, zz, vectorize), ...
-    d, numpts);
-
-mu_x_numer = @(x,y,z) x .* (f(x,y,z).^2);
-mu_x = inegral_QM2(evaluate(mu_x_numer, xx, yy, zz, vectorize), d, numpts)...
-    / QM_approx_denom;
-
-mu_y_numer = @(x,y,z) y .* (f(x,y,z).^2);
-mu_y = inegral_QM2(evaluate(mu_y_numer,xx,yy,zz,vectorize),d,numpts) ...
-    / QM_approx_denom;
-
-mu_z_numer = @(x,y,z) z .* (f(x,y,z).^2);
-mu_z = inegral_QM2(evaluate(mu_z_numer, xx, yy, zz, vectorize), d, ...
-    numpts) / QM_approx_denom;
-
-% Compute entries of the covariance matrix. The diagonal is not needed.
-covMat = zeros(3,3);
-
-% Compute the X-Y entry of the covariance matrix.
-f_xy = @(x,y,z) (x-mu_x) .* (y-mu_y) .* (f(x,y,z).^2);
-covMat(1, 2) = inegral_QM2(evaluate(f_xy, xx, yy, zz, vectorize), d, numpts);
-covMat(2, 1) = covMat(1, 2);
-
-% Compute the X-Z entry of the covariance matrix.
-f_xz = @(x,y,z) (x-mu_x) .* (z-mu_z) .* (f(x,y,z).^2);
-covMat(1, 3) = inegral_QM2(evaluate(f_xz,xx,yy,zz,vectorize), d, numpts);
-covMat(3, 1) = covMat(1, 3);
-
-% Compute the Y-Z entry of the covariance matrix.
-f_yz = @(x,y,z) (y-mu_y) .* (z-mu_z) .* (f(x,y,z).^2);
-covMat(2, 3) = inegral_QM2(evaluate(f_yz, xx, yy, zz, vectorize), d, numpts);
-covMat(3, 2) = covMat(2, 3);
-covMat = abs(covMat); % Negative values of covariance are as good as positive 
-% values in our case. They just mean the same amount of dependance between 
-% 2 variables but in the opposite (linear) direction. What matters for us 
-% is just the magnitude of the correlation. We then find the minimum sum of
-% columns of Cov to detect the most separable variable. Graph theortical
-% interpretation described in  Bebendorf & Kuske (2014).
-
-temp = sum(covMat,1); % sum of entries in columns.
-[ignore, fiberDim] = min(temp);
+% Using SVD and 1D Chebfun:
+F1 = chebfun3.unfold(vals, 1);
+F2 = chebfun3.unfold(vals, 2);
+F3 = chebfun3.unfold(vals, 3);
+rX = rank(F1.'); % Transpose to have longer columns
+rY = rank(F2.'); % and therefore being faster
+rZ = rank(F3.'); % in MATLAB.
+r = [rX, rY, rZ];
+[~, ind] = find(r==min(r));
+if ( numel(ind) == 1 )
+    fiberDim = ind;
+    return
+end
+% More than one minimum ranks exist:
+tol = 1e-3;
+lenX = length(simplify(chebfun(F1(:, 1)), tol));
+lenY = length(simplify(chebfun(F2(:, 1)), tol));
+lenZ = length(simplify(chebfun(F3(:, 1)), tol));
+len = [lenX, lenY, lenZ];
+if ( numel(ind) == 2 )
+    [~, index] = max([len(ind(1)), len(ind(2))]);
+    fiberDim = ind(index);
+else % numel(ind) = 3
+    [~, fiberDim] = max(len);
 end
 
-%%
-function I = inegral_QM2(vals, dom, numpts)
-% Quasi Monte Carlo cubature over numpts number of Halton points in the box
-% dom. vals are values of the 3D integrand.
-factor = (dom(2)-dom(1)) * (dom(4)-dom(3)) * (dom(6)-dom(5)); 
-% factor = 1 for dom = [0,1]^3.
-I = factor*sum(vals)/numpts;
-end
-
-%%
-function [x, y, z] = halton(numpts, domain)
-% Halton sequences are sequences used to generate points in space, which 
-% are deterministic and of low discrepancy. They appear to be random for 
-% many purposes.
-% 
-% From Chebfun2/sampleTest: Adapted from Grady Wright's code 22nd May 2014. 
-% generate Halton sequences on [0,1]^3:
-ndims = 3; % 3D
-p = [2 3 5 7 11 13]; % Prime numbers, i.e., bases to be used in 1D Halton 
-% sequence generation.
-H = zeros(numpts, ndims);
-for k = 1:ndims
-    N = p(k); v1 = 0; v2 = 0:N-1; lv1 = 1;
-    while ( lv1 <= numpts )
-        v2 = v2(1:max(2,min(N,ceil((numpts+1)/lv1))))/N;
-        [x1,x2] = meshgrid(v2,v1);
-        v1 = x1+x2; 
-        v1 = v1(:); 
-        lv1 = length(v1);
-    end
-    H(:,k) = v1(2:numpts+1);
-end
-% Scale [0,1]^3 to the domain of the chebfun3:
-x = (domain(2) - domain(1))*H(:,1) + domain(1); 
-y = (domain(4) - domain(3))*H(:,2) + domain(3); 
-z = (domain(6) - domain(5))*H(:,3) + domain(5); 
 end
 
 %%
 function [resolvedFibers, resolvedSlice1, resolvedSlice2] = ...
     happinessCheckBTD(fibersValues, colsValues, rowsValues, dom, pref, tech)
+% Happiness-check for the BTD: It uses all the fibers and columns and rows 
+% in the first term of the BTD.
 vsclFib = max(abs(fibersValues(:,1)));
 vsclSli = max(abs(colsValues{1}(:)));
 vsclSli = max(vsclSli, max(abs(rowsValues{1}(:))));
@@ -1017,22 +830,28 @@ fiber2Data.vscale = vsclSli;
 fiber3Data.hscale = norm(dom(3:4), inf);
 fiber3Data.vscale = vsclSli;
 
-fiber1Chebtech = tech.make(sum(fibersValues, 2), fiber1Data);
-resolvedFibers  = happinessCheck(fiber1Chebtech, [], sum(fibersValues, 2), ...
-    [], pref);
+% Convert to coefficients:
+fiber1Chebtech = tech.make(fibersValues, fiber1Data); 
+% Add absolute value of all the coefficients:
+fiber1Chebtech.coeffs = sum(abs(fiber1Chebtech.coeffs), 2);
+% Check for happiness using the corresponding tech:
+resolvedFibers  = happinessCheck(fiber1Chebtech, [], ...
+    fiber1Chebtech.coeffs, [], pref);
 
-slice1Chebtech = tech.make(sum(colsValues{1}, 2), fiber2Data);
-resolvedSlice1  = happinessCheck(slice1Chebtech, [], sum(colsValues{1}, 2),...
-    [], pref);
-
-slice2Chebtech = tech.make(sum(rowsValues{1}, 2), fiber3Data);
-resolvedSlice2  = happinessCheck(slice2Chebtech, [], sum(rowsValues{1}, 2),...
-    [], pref);
+slice1Chebtech = tech.make(colsValues{1}, fiber2Data);
+slice1Chebtech.coeffs = sum(abs(slice1Chebtech.coeffs), 2);
+resolvedSlice1  = happinessCheck(slice1Chebtech, [], ...
+    slice1Chebtech.coeffs, [], pref);
+    
+slice2Chebtech = tech.make(rowsValues{1}, fiber3Data);
+slice2Chebtech.coeffs = sum(abs(slice2Chebtech.coeffs), 2);
+resolvedSlice2  = happinessCheck(slice2Chebtech, [], ...
+    slice2Chebtech.coeffs, [], pref);
 
 end
 
 %%
-function [op, dom, pref, vscaleBnd, fiberDim, vectorize, isEqui, ...
+function [op, dom, pref, fiberDim, vectorize, isEqui, ...
     fixedRank] = parseInputs(op, varargin)
 vectorize = 0;
 isEqui = 0;
@@ -1040,7 +859,6 @@ isCoeffs = 0;
 fixedRank = 0;
 pref = chebfunpref();
 fiberDim = [];
-vscaleBnd = [];
 dom = [-1 1 -1 1 -1 1];
 
 % Preferences structure given?
@@ -1049,7 +867,6 @@ if ( any(isPref) )
     pref = varargin{isPref};
     varargin(isPref) = [];
 end
-
 
 if ( isa(op, 'char') )     % CHEBFUN3( CHAR )
     op = str2op(op);
@@ -1073,12 +890,10 @@ for k = 1:length(varargin)
                 % Interpret this as the user wants a fixed degree chebfun3 
                 % on the domain DOM.
                 len = varargin{k};
-                [xx, yy, zz] = chebfun3.chebpts3(len(1), len(2), len(3), dom);
+                [xx, yy, zz] = chebpts3(len(1), len(2), len(3), dom);
                 op = op(xx, yy, zz);
             end
         end
-    elseif strcmpi(varargin{k}, 'vscaleBnd')
-        vscaleBnd = varargin{k+1};        
     elseif strcmpi(varargin{k}, {'fiberDim'})
         fiberDim = varargin{k+1};
     elseif any(strcmpi(varargin{k}, {'vectorize', 'vectorise'}))
@@ -1106,16 +921,16 @@ function [vectorize, op] = vectorCheck(op, dom)
 % Check for cases like op = @(x,y,z) x*y^2*z
 
 vectorize = false;
-[xx, yy, zz] = ndgrid( dom(1:2), dom(3:4), dom(5:6));
+[xx, yy, zz] = ndgrid(dom(1:2), dom(3:4), dom(5:6));
 try
-    A = op(xx, yy, zz);
+    A = feval(op, xx, yy, zz);
 catch
     throwVectorWarning();
     vectorize = true;
     return
 end
 
-A = op(xx, yy, zz);
+A = feval(op, xx, yy, zz);
 if ( any(isinf(A(:) ) ) )
     error('CHEBFUN:CHEBFUN3:constructor:inf', ...
         'Function returned INF when evaluated');
@@ -1137,110 +952,184 @@ warning('CHEBFUN:CHEBFUN3:constructor:vectorize',...
     'call to avoid this warning message.']);
 end
 %%
-function op = str2op( op )
-% OP = STR2OP(OP), finds independent variables in a string and returns an op
-% handle than can be evaluated.
+function op = str2op(op)
+% OP = STR2OP(OP), finds independent variables in a string and returns an 
+% op handle than can be evaluated.
 
-vars = symvar(op); % Independent variables
-if ( numel(vars) > 3)
+vars = symvar(op);        % Independent variables
+numVars = numel(vars);
+if ( numVars == 0 )
+    op = @(x,y,z) eval (op);
+    
+elseif ( numVars == 1 )
+    op = eval(['@(' vars{1} ', myVarBeta, myVarGamma)' op]);
+    
+elseif ( numVars == 2 )
+    op = eval(['@(' vars{1} ',' vars{2} ', myVarGamma)' op]);
+
+elseif ( numVars == 3 )
+    op = eval(['@(' vars{1} ',' vars{2} ',' vars{3} ')' op]);
+
+else
     error('CHEBFUN:CHEBFUN3:constructor:str2op:depvars', ...
         'Too many independent variables in string input.');
-else
-    op = eval(['@(' vars{1} ',' vars{2} ',' vars{3} ')' op]);
 end
 
 end
 %%
-function f = constructFromDouble(op, dom, pref, isEqui)
 
+function f = fixTheRank(f , fixedRank)
+% Fix the rank of a CHEBFUN3. Used for calls to constructor with specified 
+% rank.
+
+if ( any(fixedRank) < 0 )
+    error('CHEBFUN:CHEBFUN3:constructor:fixTheRank:negative', ...
+        'Ranks should all be nonnegative.')
+elseif ( all(fixedRank) )
+    [r1, r2, r3] = rank(f);
+    t1 = fixedRank(1);
+    t2 = fixedRank(2);
+    t3 = fixedRank(3);
+    
+    % What to do with cols?
+    if ( r1 > t1 )
+        % Truncate cols:
+        f.cols = f.cols(:, 1:t1);
+        f.core = f.core(1:t1, :, :);
+        r1 = t1; % New size of core
+    elseif ( r1 < t1 )
+        % Pad cols with approprate number of zero cols:
+        zCols = chebfun(0, f.cols.domain);
+        for jj = r1 : t1 - 1
+            f.cols = [f.cols zCols];
+        end
+        % Pad mode 1 of the core tensor with zeros:
+        tempCore = zeros(t1, r2, r3);
+        tempCore(1:r1, :, :) = f.core;
+        f.core = tempCore;
+        r1 = t1; % New size of core
+    end
+    
+    % What to do with rows?
+    if ( r2 > t2 )
+        % Truncate rows:
+        f.rows = f.rows(:,1:t2);
+        f.core = f.core(:, 1:t2, :);
+        r2 = t2; % New size of core
+    elseif ( r2 < t2 )
+        % Pad rows with approprate number of zero rows:
+        zRows = chebfun(0, f.rows.domain);
+        for jj = r2 : t2 - 1        
+            f.rows = [f.rows zRows];
+        end
+        % Pad mode 2 of the core tensor with zeros:
+        tempCore = zeros(r1, t2, r3);
+        tempCore(:, 1:r2, :) = f.core;
+        f.core = tempCore;
+        r2 = t2; % New size of core
+    end
+    
+    % What to do with tubes?
+    if ( r3 > t3 )
+        % Truncate tubes:
+        f.tubes = f.tubes(:, 1:t3);
+        f.core = f.core(:, :, 1:t3);
+    elseif ( r3 < t3 )
+        % Pad tubes with approprate number of zero tubes:
+        zTubes = chebfun(0, f.tubes.domain);
+        for jj = r3 : t3 - 1
+            f.tubes = [f.tubes zTubes];
+        end
+        % Pad mode 3 of the core tensor with zeros:
+        tempCore = zeros(r1, r2, t3);
+        tempCore(:, :, 1:r3) = f.core;
+        f.core = tempCore;
+    end
+end
+
+end
+
+%%
+function f = constructFromDouble(op, dom, pref, isEqui)
+% The input is a discrete tensor of values.
 pseudoLevel = pref.cheb3Prefs.chebfun3eps;
+tech = pref.tech();
 
 f = chebfun3();
-if ( ~isEqui && numel( op ) == 1  )
+if ( ~isEqui && numel(op) == 1 )
     f = constructor(f, @(x,y,z) op + 0*x, dom);
     return;
 end
 
-if numel(size(op)) == 3 % We have a tensor of values.
-    % Calculate a tolerance and find numerical rank to this tolerance:
-    % The tolerance assumes the samples are generated by NDGRID from a 
-    % function. It depends on the size of the sample tensor, hscale of 
-    % domain, vscale of the samples, condition number of the function, and 
-    % the accuracy target in chebfun3 preferences.
-    % N.B. We cannot detect if MESHGRID was used to generate values unless
-    % we know also the (x,y,z) points used to generate those values.
-    % If we knew beforehand that ALL users WILL generate their tensor of 
-    % values ONLY from meshgrid pts, all we need is to say 
-    % vals = permute(vals,[2 1 3]); to generate a tensor corresponding to 
-    % ''meshgrid'', in which case a copy of ``points3D`` should also be 
-    % used accordingly. op = permute(op,[2 1 3]);
-    
-    if ( ~isEqui )
-        [xx, yy, zz] = points3D(size(op,1), size(op,2), size(op,3), dom, pref);
-    else
-        % Equispaced points from ndgrid, not meshgrid!
-        x = linspace(dom(1), dom(2), size(op, 1));
-        y = linspace(dom(3), dom(4), size(op, 2));
-        z = linspace(dom(5), dom(6), size(op, 3));
-        [xx, yy, zz] = ndgrid(x, y, z);
-    end
-    [relTol, absTol] = getTol3D(xx, yy, zz, op, max(size(op)), dom, ...
-        pseudoLevel, []);
-    pref.chebfuneps = relTol;
-
-    
-    % Perform 3D ACA with complete pivoting:
-    fiberDim = 3;
-    factor = 0;
-    [colsValues, rowsValues, pivotVals2D, ignore, tubesValues, ...
-        pivotVals3D, ignore, ignore, ignore] = completeACA3D(op, ...
-        fiberDim, absTol, factor, dom, pref);
-    
-    sepRank = numel(pivotVals3D); % first separation rank
-    for k=1:sepRank
-        diagValues2D{k} = diag(1./pivotVals2D{k});
-    end
-    
-    % BTD ---> Tucker compression:
-    dom2D = dom(1:4); % The first 4 entries correspond to slices
-    [core, colsValues, rowsValues] = btd2tucker(colsValues, rowsValues, ...
-        diagValues2D, pivotVals3D, dom2D, pref, absTol);
-    
-    % Construct a CHEBFUN3 object and call a sampleTest.
-    if ( ~isEqui )
-        f.cols = chebfun(colsValues, dom(1:2), pref);
-        f.rows = chebfun(rowsValues, dom(3:4), pref);
-        f.tubes = chebfun(tubesValues, dom(5:6), pref);
-    else
-        f.cols = chebfun(colsValues, dom(1:2), 'equi', pref);
-        f.rows = chebfun(rowsValues, dom(3:4), 'equi', pref);
-        f.tubes = chebfun(tubesValues, dom(5:6), 'equi', pref);
-    end
-    
-    % TODO: Do we want to simplify when constructing from doubles?
-    % The following causes the 2nd test in test_construnctorsyntax() fail.
-%     f.cols = simplify(f.cols, pref.chebfuneps, 'globaltol');
-%     f.rows = simplify(f.rows, pref.chebfuneps, 'globaltol');
-%     f.tubes = simplify(f.tubes, pref.chebfuneps, 'globaltol');
-    
-    f.core = core;
-    f.domain = dom;
-    return;
+% N.B. We cannot detect if MESHGRID was used to generate values unless we 
+% know also the (x,y,z) points used to generate those values. If we knew 
+% beforehand that ALL users WILL generate their tensor of values ONLY from 
+% meshgrid pts, all we need is to say vals = permute(vals,[2 1 3]); to 
+% generate a tensor corresponding to ''meshgrid'', in which case a copy of 
+% ``tensorGrid`` should also be used accordingly. op = permute(op,[2 1 3]);
+if ( ~isEqui )
+    m = size(op, 1);
+    n = size(op, 2);
+    p = size(op, 3);
+    out = tech.tensorGrid([m, n, p], dom);
+    xx = out{1};
+    yy = out{2};
+    zz = out{3};
+else
+    % Equispaced points from ndgrid, not meshgrid!
+    x = linspace(dom(1), dom(2), size(op, 1));
+    y = linspace(dom(3), dom(4), size(op, 2));
+    z = linspace(dom(5), dom(6), size(op, 3));
+    [xx, yy, zz] = ndgrid(x, y, z);
 end
+
+% Calculate a tolerance and find numerical rank to this tolerance: The 
+% tolerance assumes the samples are generated by NDGRID from a function. 
+% It depends on the size of the sample tensor, hscale of domain, vscale of 
+% the samples, condition number of the function, and the accuracy target in
+% chebfun3 preferences.
+[relTol, absTol] = getTol3D(xx, yy, zz, op, max(size(op)), dom, pseudoLevel);
+pref.chebfuneps = relTol;
+
+% Perform 3D ACA with complete pivoting:
+factor = 0;
+[colsValues, rowsValues, pivotVals2D, ~, tubesValues, pivotVals3D, ~, ~, ...
+    ~] = completeACA3D(op, absTol, factor, dom, pref);
+
+sepRank = numel(pivotVals3D); % first separation rank
+diagValues2D = cell(sepRank, 1);
+for k=1:sepRank
+        diagValues2D{k} = diag(1./pivotVals2D{k});
+end
+
+% BTD ---> Tucker compression:
+[core, colsValues, rowsValues] = btd2tucker(colsValues, rowsValues, ...
+    diagValues2D, pivotVals3D, absTol);
+
+% Construct a CHEBFUN3 object and call a sampleTest.
+if ( ~isEqui )
+    f.cols = chebfun(colsValues, dom(1:2), pref);
+    f.rows = chebfun(rowsValues, dom(3:4), pref);
+    f.tubes = chebfun(tubesValues, dom(5:6), pref);
+else
+    f.cols = chebfun(colsValues, dom(1:2), 'equi', pref);
+    f.rows = chebfun(rowsValues, dom(3:4), 'equi', pref);
+    f.tubes = chebfun(tubesValues, dom(5:6), 'equi', pref);
+end
+f.core = core;
+f.domain = dom;
+return
 
 end
 
 %%
 function [colsBtd, rowsBtd, pivotValues2D, pivotIndices2D, fibers, ...
     pivotValues3D, pivotIndices3D, ifail3D, ifail2D] = completeACA3D(A, ...
-    fiberDim, tol, factor, dom, pref)
+    tol, factor, dom, pref)
 %   Non-adaptive (fixed-size) MACA, i.e., a 3D analogue of Gaussian 
 %   elimination with complete pivoting.
 %
 %   INPUTS:     A:        A given tensor of function values at 3D chebpts.
-%
-%               fiberDim: Dimension to be used for 1st separation of fibers
-%                         and slices.    
 %
 %               tol:      A given tolerance on the magnitude of the pivots.
 %
@@ -1267,47 +1156,42 @@ function [colsBtd, rowsBtd, pivotValues2D, pivotIndices2D, fibers, ...
 %                             pivot entries during the iterations. 
 %
 %               pivotIndices3D: A matrix of size rank x 3, where rank = iter. 
-%                             Each of its rows contain the index of one 3D pivotValues.
+%                         Each of its rows contain the index of one 3D pivotValues.
 %
 %                      ifail: We fail if iter >= (width/factor).
 
-%   The output of this code should satisfy the following slice decomposition:
+% Developer Note: The output of this code should satisfy the following 
+% slice decomposition:
 %       AA \approx temp, 
-    % where AA is a copy of A from input, and temp is computed as follows:
+% where AA is a copy of A from input, and temp is computed as follows:
 %   temp = zeros(size(A2)); 
 %   for i = 1:3, 
-%         temp = temp + chebfun3.outerProd(slices(:,:,i),fibers(:,i)./pivotValues3D(i));
+%    temp = temp + chebfun3.outerProd(slices(:,:,i),fibers(:,i)./pivotValues3D(i));
 %   end
 %   norm(AA(:) - temp(:))
 %
-%   An analogous BTD decomposotion should also hold.
+% An analogous BTD decomposotion should also hold.
 
 pseudoLevel = pref.cheb3Prefs.chebfun3eps;
+tech = pref.tech();
 
 % Set up output variables.
 [n1, n2, n3] = size(A);
-%width = min(min(n1, n2),n3); % Use to tell us how many pivots we can take
-if fiberDim == 1
-    width = min(n1, n2*n3);    % Use to tell us how many pivots we can take
-elseif fiberDim == 2
-    width = min(n2, n1*n3);   
-else
-   width = min(n3, n1*n2);
-end
+width = min(n3, n1*n2);        % Use to tell us how many pivots we can take
+                               % See Developer note in the following.
 pivotValues3D = zeros(1);      % Store an unknown number of Pivot values
 pivotIndices3D = zeros(1, 3);  % Store (col, row, tube) = entries of pivot location
 ifail3D = 1;                   % Assume we fail in 3D ACA
 ifail2D = 1;                   % Assume we also fail in the 2D ACAs
 globalTol = [];
-sliceDim = [1 2];
+sliceDim = [1 2];              % See Developer note in the following.
 
 % Main algorithm
-iter = 0;                  % Count number of interpolated rows/slices.
-[infNorm, ind] = max( abs ( reshape(A,numel(A),1) ) ); % Complete pivoting
-[col, row, tube] = ind2sub( size(A) , ind);
+iter = 0;                      % Count number of interpolated rows/slices.
+[infNorm, ind] = max(abs(reshape(A, numel(A), 1))); % Complete pivoting
+[col, row, tube] = ind2sub(size(A), ind);
 
 scl = infNorm;
-
 % If the function is the zero function.
 if ( scl == 0 )
     pivotValues3D = 0;
@@ -1319,9 +1203,9 @@ if ( scl == 0 )
     ifail3D = 0;
     ifail2D = 0;
 else
-    fibers(:,1) = zeros(size(A, 3),1);
-    colsBtd{1} = zeros(size(A, sliceDim(1)),1);
-    rowsBtd{1} = zeros(size(A, sliceDim(2)),1);
+    fibers(:,1) = zeros(size(A, 3), 1);
+    colsBtd{1} = zeros(size(A, sliceDim(1)), 1);
+    rowsBtd{1} = zeros(size(A, sliceDim(2)), 1);
     pivotValues2D{1} = 0;
     pivotIndices2D{1} = [0 0];
     slices(:,:,1) = zeros(size(A,sliceDim(1)), size(A, sliceDim(2)), 1);
@@ -1330,58 +1214,70 @@ dom2D = dom(1:4);
 
 while ( ( infNorm > tol ) && ( iter < width / factor) ...
         && ( iter < width ) )
-        fibers(:, iter+1) = A(col, row, :);       % Extract skeleton tubes. 
-        % Each column in "fibers" is N3 x 1.
-
-        slices(:,:,iter+1) = A(:,:,tube);         % Extract skeleton slices to be decomposed further.
-        % Each slice in "slices" is N1 x N2.
-        
-        PivVal3D = A(col, row, tube);             % f( X(col), Y(row), Z(tube) ) in the 1st iteration
-        
-        % Use the first slice to compute globalTol for 2D ACAs applied to all slices
-        if iter == 0
-            [xx2D, yy2D] = points2D(n1, n2, dom2D, pref); % ndgrid is used now
-            globalTol = GetTol2Dv2(xx2D, yy2D, slices(:,:,1), dom2D, pseudoLevel);
-        end
-        
-        % Apply 2D ACA to each slice to form columns and rows in block term
-        % decomposition
-        [colsBtd{iter+1}, pivotValues2D{iter+1}, rowsBtd{iter+1}, ...
-            pivotIndices2D{iter+1}, ifail2DIter] = ...
-            chebfun2ACAv2(slices(:, :, iter+1), globalTol, factor);
-        
-        % Since we use globalTol for slices after 1st iteration, it might
-        % be that these 2D ACA's don't fail, while with a localTol they
-        % would fail. So, it is auaully the 1st slice which shows whether
-        % or not we got the 2D rank right. So, just use that one:
-        if iter == 0
-            ifail2D = ifail2DIter;
-        end
-        
-        % Update the tensor, i.e., compute the residual tensor:
-        A = A - chebfun3.outerProd(colsBtd{iter+1} * ...
-            (diag(1./(pivotValues2D{iter+1}))) * (rowsBtd{iter+1}.'), ...
-            fibers(:,iter+1) ./ PivVal3D);
-        %A = A - chebfun3.outerProd(slices(:,:,iter+1),fibers(:,iter+1)./PivVal3D);
+    fibers(:, iter+1) = A(col, row, :);  % Extract skeleton tubes. Each
+    % column in "fibers" is N3 x 1.
     
-    % Keep track of progress in 3D ACA
-    iter = iter + 1;                          % One more fiber and slice are removed from A
+    slices(:,:,iter+1) = A(:,:,tube);    % Extract skeleton slices to be 
+    % decomposed further. Each slice in "slices" is N1 x N2.
+    
+    % Developer Note: As the above lines show, we are always separating the
+    % last variable from the first two. The point is that the function 
+    % handle has already been permuted outside this subroutine and 
+    % therefore the tensor A here contains values of the permuted function.
+    % In this sense, here we are in essense separating the variable chosen 
+    % by the dimension clustering step, and not necessarily the last 
+    % variable z.
+    
+    PivVal3D = A(col, row, tube);        % = f(X(col), Y(row), Z(tube)) in
+                                         % the 1st iteration.
+    
+    % Use the first slice to compute globalTol for 2D ACAs applied to all 
+    % slices.
+    if ( iter == 0 )
+        out = tech.tensorGrid([n1, n2], dom2D);
+        xx2D = out{1};
+        yy2D = out{2};
+        globalTol = GetTol2D(xx2D, yy2D, slices(:,:,1), dom2D, pseudoLevel);
+    end
+    
+    % Apply 2D ACA to each slice to form columns and rows in block term
+    % decomposition:
+    [colsBtd{iter+1}, pivotValues2D{iter+1}, rowsBtd{iter+1}, ...
+        pivotIndices2D{iter+1}, ifail2DIter] = ...
+        chebfun2ACA(slices(:, :, iter+1), globalTol, factor);
+    
+    % Developer Note: Since we use globalTol for slices after 1st 
+    % iteration, it might be that these 2D ACA's don't fail, while with a 
+    % localTol they would fail. So, it is auaully the 1st slice which shows
+    % whether or not we got the 2D rank right. So, just use that one:
+    if ( iter == 0 )
+        ifail2D = ifail2DIter;
+    end
+    
+    % Update the tensor, i.e., compute the residual tensor:
+    A = A - chebfun3.outerProd(colsBtd{iter+1} * ...
+        (diag(1./(pivotValues2D{iter+1}))) * (rowsBtd{iter+1}.'), ...
+        fibers(:,iter+1) ./ PivVal3D);
+    % Equivalently, we have: 
+    % A = A - chebfun3.outerProd(slices(:,:,iter+1),fibers(:,iter+1)./PivVal3D);
+    
+    % Keep track of progress in 3D ACA:
+    iter = iter + 1;              % One more fiber and slice are removed from A
     pivotValues3D(iter) = PivVal3D;           % Store pivot value in 3D ACA
-    pivotIndices3D(iter,:)=[col row tube];    % Store pivot location in 3D ACA
+    pivotIndices3D(iter, :)=[col row tube];    % Store pivot location in 3D ACA
     
-    % Find next 3D pivot value and its location
+    % Find next 3D pivot value and its location:
     [infNorm, ind] = max(abs(A(:)));
-    [col, row, tube] = ind2sub( size(A) , ind);
-    
+    [col, row, tube] = ind2sub(size(A), ind);
 end
 
-if ( iter>0 && all(pivotValues2D{iter} == 0) )    
+if ( ( iter > 0 ) && ( all(pivotValues2D{iter} == 0) ) )
     % If the last 2D pivot was zero, remove it
     colsBtd=colsBtd(1:iter-1);
     rowsBtd=rowsBtd(1:iter-1);
     pivotValues2D = pivotValues2D(1:iter-1);
     pivotIndices2D = pivotIndices2D(1:iter-1);
-    fibers = fibers(:,1:iter-1);
+    fibers = fibers(:, 1:iter-1);
     pivotValues3D = pivotValues3D(1:iter-1);
     pivotIndices3D=pivotIndices3D(1:iter-1,:);
     infNorm = 0; % If the last 2D pivot was zero, infNorm will be NaN and 
@@ -1391,11 +1287,13 @@ end
 
 if ( infNorm <= tol )
     ifail3D = 0;                               % We didn't fail in 3D ACA.
+    if ( iter == 0 )
+        ifail2D = 0;    
+    end
 end
 if ( iter > width/factor )
     ifail3D = 1;                               % We did fail in 3D ACA.
 end
-%close all; semilogy(1:numel(pivotValues)+1, abs([pivotValues, infNorm]));
 
 end
 %%

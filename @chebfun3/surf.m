@@ -1,13 +1,13 @@
 function varargout = surf(f, varargin)
 %SURF  Plots three cross sections of a CHEBFUN3.
-%
 %   SURF(F) or SURF(F, 'SLIDER') plot three cross sections of a CHEBFUN3 
 %   object F. It also allows the user to adjust the cross sections using 
 %   sliders.
 %
-%   If F is complex-valued, SLICE should be used instead.
+%   Use SLICE instead of this, if F is complex-valued.
 % 
-%   See also CHEBFUN3/PLOT, CHEBFUN3/SLICE, CHEBFUN3/ISOSURFACE and SCAN.
+% See also CHEBFUN3/PLOT, CHEBFUN3/SLICE, CHEBFUN3/ISOSURFACE and 
+% CHEBFUN3/SCAN.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
@@ -41,9 +41,11 @@ xx = dom(1)*ones(numpts);
 [yy,zz] = ndgrid(linspace(dom(3), dom(4), numpts), ...
     linspace(dom(5), dom(6), numpts));
 v = feval(f,xx,yy,zz);
-% if ( ~isreal(v) )
-%     v = abs(v);
-% end
+if ( ~isreal(v) )
+    error('CHEBFUN:CHEBFUN3:surf:complex', ...
+        'Use slice for complex-valued functions.');
+    return
+end
 
 set(handles.xSlider, 'Min', dom(1));
 set(handles.xSlider, 'Max', dom(2));
@@ -56,37 +58,26 @@ handles.Bnd = [a, b];
 handles.yy1 = yy;
 handles.zz = zz;
 
-xlim(handles.axes1,[dom(3), dom(4)])
-ylim(handles.axes1,[dom(5), dom(6)])
-zlim(handles.axes1,[a, b])
+xlim(handles.axes1, [dom(3), dom(4)])
+ylim(handles.axes1, [dom(5), dom(6)])
+zlim(handles.axes1, [a, b])
 axis(handles.axes1,'manual')
 surf(handles.axes1, yy, zz, v)
-% if isreal(v)
-%     surf(handles.axes1, yy, zz, v)
-% else
-%     error('CHEBFUN:CHEBFUN3:surf:complex', ...
-%         'Use slice for complex-valued functions.');
-%     return
-% end
-% if isreal(v)
-%     surf(handles.axes1, yy, zz, v)
-% else
-%     %% Phase Protrait plot
-%     surf(handles.axes1, yy, zz, 0*v, angle(-v), 'EdgeColor','none');
-%     caxis(handles.axes1, [-pi pi]), 
-%     colormap(handles.axes1, 'hsv')
-%     view(handles.axes1, 0, 90), 
-%     axis(handles.axes1, 'equal') 
-%     axis(handles.axes1, 'off')
-% end
-
+if ( ~isreal(v) )
+    error('CHEBFUN:CHEBFUN3:surf:complex', ...
+        'Use slice for complex-valued functions.');
+    return
+end
 yy = dom(3)*ones(numpts);
 [xx,zz] = ndgrid(linspace(dom(1), dom(2), numpts), ...
     linspace(dom(5), dom(6), numpts));
 v = feval(f,xx,yy,zz);
-% if ( ~isreal(v) )
-%     v = abs(v);
-% end
+if ( ~isreal(v) )
+    error('CHEBFUN:CHEBFUN3:surf:complex', ...
+        'Use slice for complex-valued functions.');
+    return
+end
+
 set(handles.ySlider, 'SliderStep', [1/maxNumber , 15/maxNumber]);
 set(handles.ySlider, 'Min', dom(3));
 set(handles.ySlider, 'Max', dom(4));
@@ -98,25 +89,22 @@ ylim(handles.axes2,[dom(5), dom(6)])
 zlim(handles.axes2,[a, b])
 axis(handles.axes2,'manual')
 surf(handles.axes2, xx, zz, v)
-% if isreal(v)
-%     surf(handles.axes2, xx, zz, v)
-% else
-%     %% Phase Protrait plot
-%     surf(handles.axes2, xx, zz, 0*v, angle(-v), 'EdgeColor', 'none');
-%     caxis(handles.axes2, [-pi pi]), 
-%     colormap(handles.axes2, 'hsv')
-%     view(handles.axes2, 0, 90), 
-%     axis(handles.axes2, 'equal') 
-%     axis(handles.axes2, 'off')
-% end
+if ( ~isreal(v) )
+    error('CHEBFUN:CHEBFUN3:surf:complex', ...
+        'Use slice for complex-valued functions.');
+    return
+end
 
 zz = dom(5)*ones(numpts);
 [xx,yy] = ndgrid(linspace(dom(1), dom(2), numpts), ...
     linspace(dom(3), dom(4), numpts));
 v = feval(f,xx,yy,zz);
-% if ( ~isreal(v) )
-%     v = abs(v);
-% end
+if ( ~isreal(v) )
+    error('CHEBFUN:CHEBFUN3:surf:complex', ...
+        'Use slice for complex-valued functions.');
+    return
+end
+
 set(handles.zSlider, 'SliderStep', [1/maxNumber, 15/maxNumber]);
 set(handles.zSlider, 'Min', dom(5));
 set(handles.zSlider, 'Max', dom(6));
@@ -128,31 +116,28 @@ ylim(handles.axes3,[dom(3), dom(4)])
 zlim(handles.axes3,[a, b])
 axis(handles.axes3,'manual')
 surf(handles.axes3, xx, yy, v)
-% if isreal(v)
-%     surf(handles.axes3, xx, yy, v)
-% else
-%     %% Phase Protrait plot
-%     surf(handles.axes3, xx, yy, 0*v, angle(-v), 'EdgeColor','none');
-%     caxis(handles.axes3, [-pi pi]),
-%     colormap(handles.axes3, 'hsv')
-%     view(handles.axes3, 0, 90), 
-%     axis(handles.axes3, 'equal') 
-%     axis(handles.axes3, 'off')
-% end
+if ( ~isreal(v) )
+    error('CHEBFUN:CHEBFUN3:surf:complex', ...
+        'Use slice for complex-valued functions.');
+    return
+end
 
 % Update handles structure
- guidata(h, handles);
- 
+guidata(h, handles); 
+
+% Force the figure to clear when another plot is drawn on it so that GUI
+% widgets don't linger.  (NB:  This property needs to be reset to 'add' every
+% time we change the plot using a slider; otherwise, the slider movement will
+% itself clear the figure, which is not what we want.)
+set(h, 'NextPlot', 'replacechildren');
+
 end
 
 function h = instantiateSurf3GUI()
 
 % Load up the GUI from the *.fig file.
-%h = openfig('/Users/user/Desktop/My work/git/chebfun3/@chebfun3/surf.fig', 'invisible');
-% h = openfig('/surf.fig', 'invisible');
-
 installDir = chebfunroot();
-h = openfig( [installDir '/@chebfun3/surf.fig'], 'invisible');
+h = openFigInCurrentFigure([installDir '/@chebfun3/surf.fig']);
 
 % Do any required initialization of the handle graphics objects.
 panels = get(h, 'Children'); % 3 panels exist in the surf3.fig.
@@ -202,120 +187,85 @@ for i = 1:1:length(G3)
     end    
 end
 
-% Add a toolbar to the GUI.
-set(h,'toolbar','figure');
-
 % Store handles to GUI objects so that the callbacks can access them. 
 guidata(h, guihandles(h));
-    
-% Make the GUI window "visible" to the rest of the handle graphics
-% system so that things like gcf(), gca(), etc. work properly.
-set(h, 'HandleVisibility', 'on');
 
-% Draw the GUI.
-set(h, 'Visible', 'on');
 end
 
-
-% --- Executes on slider movement.
 function xSlider_Callback(hObject, eventdata, handles)
+% --- Executes on slider movement.
 % hObject    handle to xSlider (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+nextPlot = get(hObject.Parent.Parent, 'NextPlot');
+set(hObject.Parent.Parent, 'NextPlot', 'add');
+
 yy = handles.yy1;
 zz = handles.zz;
 xslice = get(hObject, 'Value'); %returns position of slider
-% [xx,yy] = ndgrid(linspace(dom(1), dom(2), numpts), ...
-%     linspace(dom(3), dom(4), numpts));
 xx = xslice*ones(size(yy));
 v = feval(handles.f, xx, yy, zz);
-% if ( ~isreal(v) )
-%     v = abs(v);
-% end
 xlim(handles.axes1, [yy(1,1), yy(end,end)])
 ylim(handles.axes1, [zz(1,1), zz(end,end)])
 zlim(handles.axes1, [handles.Bnd(1), handles.Bnd(2)])
 axis(handles.axes1, 'manual')
 surf(handles.axes1, yy, zz, v)
-% if isreal(v)
-%     surf(handles.axes1, yy, zz, v)
-% else
-%     %% Phase Protrait plot
-%     surf(handles.axes1, yy, zz, 0*v, angle(-v), 'EdgeColor','none');
-%     caxis(handles.axes1, [-pi pi])
-%     colormap(handles.axes1, 'hsv'), %colormap hsv(600)
-%     view(handles.axes1, 0, 90), 
-%     axis(handles.axes1, 'equal') 
-%     axis(handles.axes1, 'off') 
-% end
 
 handles.output = hObject;
 
+set(hObject.Parent.Parent, 'NextPlot', nextPlot);
+
 end
 
-% --- Executes on slider movement.
 function ySlider_Callback(hObject, eventdata, handles)
+% --- Executes on slider movement.
 % hObject    handle to ySlider (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+nextPlot = get(hObject.Parent.Parent, 'NextPlot');
+set(hObject.Parent.Parent, 'NextPlot', 'add');
+
 xx = handles.xx;
 zz = handles.zz;
 yslice = get(hObject, 'Value'); %returns position of slider
 yy = yslice*ones(size(xx));
 v = feval(handles.f, xx, yy, zz);
-% if ( ~isreal(v) )
-%     v = abs(v);
-% end
 xlim(handles.axes2, [xx(1,1), xx(end,end)])
 ylim(handles.axes2, [zz(1,1), zz(end,end)])
 zlim(handles.axes2, [handles.Bnd(1), handles.Bnd(2)])
 axis(handles.axes2, 'manual')
 surf(handles.axes2, xx, zz, v)
-% if isreal(v)
-%     surf(handles.axes2, xx, zz, v)
-% else
-%     %% Phase Protrait plot
-%     surf(handles.axes2, xx, zz, 0*v, angle(-v), 'EdgeColor','none');
-%     caxis(handles.axes2, [-pi pi]), 
-%     colormap(handles.axes2, 'hsv')
-%     view(handles.axes2, 0, 90)
-%     axis(handles.axes2, 'equal')
-%     axis(handles.axes2, 'off')
-% end
 
 handles.output = hObject;
 
+set(hObject.Parent.Parent, 'NextPlot', nextPlot);
+
 end
 
-% --- Executes on slider movement.
 function zSlider_Callback(hObject, eventdata, handles)
+% --- Executes on slider movement.
 % hObject    handle to zSlider (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+nextPlot = get(hObject.Parent.Parent, 'NextPlot');
+set(hObject.Parent.Parent, 'NextPlot', 'add');
+
 xx = handles.xx;
 yy = handles.yy2;
 zslice = get(hObject, 'Value'); %returns position of slider
 zz = zslice*ones(size(xx));
 v = feval(handles.f, xx, yy, zz);
-% if ( ~isreal(v) )
-%     v = abs(v);
-% end
 xlim(handles.axes3, [xx(1,1), xx(end,end)])
 ylim(handles.axes3, [yy(1,1), yy(end,end)])
 zlim(handles.axes3, [handles.Bnd(1), handles.Bnd(2)])
 axis(handles.axes3, 'manual')
 surf(handles.axes3, xx, yy, v)
-% if isreal(v)
-%     surf(handles.axes3, xx, yy, v)
-% else
-%     %% Phase Protrait plot
-%     surf(handles.axes3, xx, yy, 0*v, angle(-v), 'EdgeColor','none');
-%     caxis(handles.axes3, [-pi pi]), 
-%     colormap(handles.axes3, 'hsv'), %colormap hsv(600)
-%     view(handles.axes3, 0, 90), 
-%     axis(handles.axes3, 'equal') 
-%     axis(handles.axes3, 'off')
-% end
 
 handles.output = hObject;
+
+set(hObject.Parent.Parent, 'NextPlot', nextPlot);
+
 end

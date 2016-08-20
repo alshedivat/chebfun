@@ -1,4 +1,4 @@
-function pass = test_coefficients( pref )
+function pass = test_coefficients(pref)
 % Test whether Chebfun3 can compute its bivariate tensor Chebyshev 
 % coefficients correctly.
 
@@ -30,7 +30,7 @@ f = chebfun3( @(x,y,z) cos(x+y+z) );
 lenCols = length(f.cols);
 lenRows = length(f.rows);
 lenTubes = length(f.tubes);
-[xx, yy, zz] = chebfun3.chebpts3(lenCols, lenRows, lenTubes, ...
+[xx, yy, zz] = chebpts3(lenCols, lenRows, lenTubes, ...
     [-1, 1, -1, 1, -1, 1], kind);
 vals = f(xx, yy, zz);
 X = chebfun3.coeffs2vals(chebcoeffs3(f));

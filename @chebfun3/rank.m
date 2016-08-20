@@ -1,19 +1,25 @@
 function varargout = rank(F)
-%RANK   Multilinear rank of a CHEBFUN3 object F.
+%RANK   Trilinear or Tucker rank of a CHEBFUN3 object.
+%   [rX, rY, rZ] = RANK(F) returns the size of the core tensor, i.e., rX is the
+%   number of columns in factor quasimatrix F.cols, rY is the number of 
+%   columns in F.rows and rZ is the number of columns in F.tubes.
 %
-%   If three outputs are asked for, then it is the size of the core tensor, 
-%   i.e., r = [size(F.cols,2), size(F.rows,2), size(F.tubes,2)];
-%   If just one output is asked for, then r is the max size of the core 
-%   tensor. 
+%   r = RANK(F) returns the maximum entry in the size of the core tensor.
 %
-%   See also CHEBFUN3/HOSVD.
+%   An exception is the zero CHEBFUN3 object for which rank is defined to 
+%   be zero. 
+%
+% See also CHEBFUN3/HOSVD.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
 
-
 r = size(F.core);
-if numel(r)<3
+if ( numel(r) < 3 )
+    % Developer note: If the input function handle is bivariate, then the 
+    % core tensor reduces to be a 2D matrix. Try e.g. 
+    % >> f = chebfun3(@(x, y, z) cos(x + y))
+    % If this has happened, then manually force it to be a tensor.
     r = [r, 1];
 end
 

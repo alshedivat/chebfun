@@ -1,10 +1,12 @@
 function out = isreal(f)
-%ISREAL   Real-valued CHEBFUN3 test.
-%   ISREAL(F) returns logical true if F does not have an nonzero imaginary
+%ISREAL   Test if a CHEBFUN3 object F is Real-valued.
+%   ISREAL(F) returns logical true if F does not have any nonzero imaginary
 %   part and false otherwise.
 %  
-%   (This is slightly different from the Matlab convention, where
-%   isreal(x) is false if x is a complex number whose imaginary part is 0.)
+%   (This is slightly different from the Matlab convention, where isreal(x)
+%   is false if x is a complex number whose imaginary part is 0.)
+%
+% See also CHEBFUN/ISREAL and CHEBFUN2/ISREAL.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.

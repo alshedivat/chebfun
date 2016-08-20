@@ -1,14 +1,17 @@
 function h = min2(f, g, dims)
 %MIN2   Minimum value of a CHEBFUN3 in two directions.
 %   MIN2(F) returns a 1D chebfun representing the minimum of the CHEBFUN3 
-%   along the y and z directions, i.e, MIN2(F) = @(z) min(F(:, :, z)).
+%   along the x and y directions, i.e, MIN2(F) = @(z) min(F(:, :, z)).
 %
 %   MIN2(F, [], DIMS) returns a CHEBFUN representing the minimum of F along 
-%   the DIMS directions. DIMS = [1, 2] means along the x and y directions, etc.
+%   the DIMS directions. DIMS = [1, 2] means along the x and y directions, 
+%   etc.
 %
 %   WARNING: This function is not always accurate to the expected precision. 
 % 
-%   For the global minimum use MIN3.
+%   Use MIN3 for computing the global minimum.
+%
+% See also CHEBFUN3/MIN and CHEBFUN3/MIN3.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
@@ -41,7 +44,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 dom = f.domain;
-n = 512;
+n = 129;
 if ( all(dims == [1, 2]) || all(dims == [2, 1]) )
     vals = sample(f, n, n, n);
     temp = chebfun3.unfold(vals, [3]);

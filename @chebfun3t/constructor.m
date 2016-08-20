@@ -1,16 +1,17 @@
 function f = constructor(f, op, varargin)
-%CONSTRUCTOR   The main CHEBFUN3T constructor.
-%   Classiacal full tensor approach for 3D functions. No low-rank technique
-%   is involved here.
+%CONSTRUCTOR   Main CHEBFUN3T constructor.
+%   Classical full tensor approach for 3D functions. No low-rank technique
+%   is involved here. This is experimental code, not for ordinary use.
+%
+% See also CHEBFUN3.  
+
+%   The 'trig' flag is NOT implemented.
 
 % Copyright 2016 by The University of Oxford and The Chebfun Developers.
 % See http://www.chebfun.org/ for Chebfun information.
 
-%TODO: add `trig` to chebfun3t: HAPPINESSCHECK here DOES NOT WORK WITH TRIGs PROPERLY.
-
 % Parse the inputs:
 [op, dom, pref, vectorize] = parseInputs(op, varargin{:});
-% TODO: Make parseInputs the same as CHEBFUN3.
 
 % Set preferences:
 tech        = pref.tech();
@@ -34,7 +35,10 @@ isHappy = 0;
 m = grid; n = grid; p = grid;
 for i=1:10
     %% Compute values at 3D chebpts
-    [xx, yy, zz] = points3D(m, n, p, dom, pref);
+    out = tech.tensorGrid([m, n, p], dom);
+    xx = out{1};
+    yy = out{2};
+    zz = out{3};
     F = op(xx,yy,zz);
     
     % Does the function blow up or evaluate to NaN?:
@@ -55,43 +59,22 @@ for i=1:10
     isHappy = isHappyX & isHappyY & isHappyZ;
     
     %% PHASE II
-    % This phase refines the grid ONLY in the directions which are needed. 
+    % This phase refines the grid ONLY in "unhappy" directions.
     % We don't refine here if ALL the directions are nonhappy (as mentioned 
-    % in the following). If, however, 1 or 2 of the directions are nonhappy, 
+    % in the following). If, however, less than 3 directions are nonhappy, 
     % we refine in those directions only.
-    
-    % TODO: Currently, in this Phase II, we allow the lengths of the grid 
-    % in the directions which are not happy to be ONLY 2 times bigger than
-    % the "happy directions". In other words, we do refinement only in ONE
-    % LEVEL. Consider e.g., the following "unsymmetric" function:
-    % f = @(x,y,z) sin(x./2 + y./3 + 20*z);
-    % Here, f3t = chebfun3t(f) will be happy in X and Y directions in the 
-    % first run of Phase I, i.e., with m = 12 and n = 12 but with
-    % isHappyZ=0 when p = 12. What we do currently in this Phase II, is
-    % that we refine in the Z direction only ONCE, i.e., we increase P to
-    % 17 and check happiness3D again. If we are not still happy, then we go
-    % to the next run of Phase I, i.e., we set m=n=p=35 and start again.
-    % The point is that after we ran Phase II once, we check
-    % happiness and if we were not happy in the same directions that we
-    % were not BEFORE Phase II, we might allow refinement in those unhappy
-    % directions ONLY AGAIN.
-    % It is correct that the final chopping will reduce the length in the
-    % directions we were happy before, the point is that with this present
-    % constructor, we might increase the lengths even in the direction we
-    % don't really need which "might" (depending on how big are m, n and p already) 
-    % make the computations slow without any good reasons.
     
     m2 = m; n2 = n; p2 = p;
     while (~isHappy)
         % We need to refine the grid. We refine in 2 different ways: If all
         % 3 directions are unhappy, the new grid is bigger in each
         % direction by a factor of sqrt(2). If 1 or 2 of the directions are
-        % unhappy, we refine only those unhappy directions by a factor of
+        % unhappy, we refine (only those unhappy directions) by a factor of
         % 2.
         
         if (~isHappyX && ~isHappyY && ~isHappyZ)
-            % All directions are unhappy. Refine differently to avoid
-            % rapidly getting to a huge tensor.
+            % All directions are unhappy. To avoid getting an unncecessarily
+            % big tensor, refine differently.
             break;
         end
         if (~isHappyX)
@@ -103,7 +86,10 @@ for i=1:10
         if (~isHappyZ)
             p2 = gridRefinePhase2(p2, pref);
         end
-        [xx, yy, zz] = points3D(m2, n2, p2, dom, pref);
+        out = tech.tensorGrid([m2, n2, p2], dom);
+        xx = out{1};
+        yy = out{2};
+        zz = out{3};
         F = op(xx,yy,zz);
         coeffs3D = chebfun3t.vals2coeffs(F);
         [isHappyX, isHappyY, isHappyZ, cutoffX2, cutoffY2, cutoffZ2] = ...
@@ -112,7 +98,7 @@ for i=1:10
     end
     
      if ( isHappy )
-         % Chop the tail.
+         % Chop the tail:
          coeffs3D = coeffs3D(1:cutoffX2, 1:cutoffY2, 1:cutoffZ2);
          
          % Construct a CHEBFUN3T object:
@@ -120,13 +106,12 @@ for i=1:10
          f.vscale = max(abs(F(:)));
          f.domain = dom;
          
-         % Step 2: Start a SAMPLETEST
+         % Step 2: Apply a SAMPLETEST:
          [m2, n2, p2] = size(coeffs3D);
-         
          if ( passSampleTest )
              tol2 = getTol3D(xx, yy, zz, F, length(xx), dom, pseudoLevel);
              pass = sampleTest(f, op, tol2, vectorize);
-             if ( pass ) % Step 1 was happy and sampleTest is also passed.
+             if ( pass ) % :)
                  break
              end 
          end
@@ -136,6 +121,7 @@ for i=1:10
     p = gridRefinePhase1(p);
 end
 
+% Reached maximum allowed tensor size and still unhappy?
 if ( i == 10 && ~isHappy )
     % Throw a warning and construct from the latest unhappy approximation
     warning('CHEBFUN:CHEBFUN3T:constructor:notResolved', ...
@@ -147,35 +133,6 @@ end
 
 end
 
-%%
-function [xx, yy, zz] = points3D(m, n, p, dom, pref)
-% Get the sample points that correspond to the right grid for a particular
-% technology.
-
-% What tech am I based on?:
-tech = pref.tech();
-
-if ( isa(tech, 'chebtech2') )
-    x = chebpts( m, dom(1:2), 2 );   % x grid.
-    y = chebpts( n, dom(3:4), 2 );
-    z = chebpts( p, dom(5:6), 2 );
-    [xx, yy, zz] = ndgrid( x, y, z ); 
-elseif ( isa(tech, 'chebtech1') )
-    x = chebpts( m, dom(1:2), 1 );   % x grid.
-    y = chebpts( n, dom(3:4), 1 ); 
-    z = chebpts( p, dom(5:6), 1 );
-    [xx, yy, zz] = ndgrid( x, y, z ); 
-elseif ( isa(tech, 'trigtech') )
-    x = trigpts( m, dom(1:2) );   % x grid.
-    y = trigpts( n, dom(3:4) );
-    z = chebpts( p, dom(5:6), 2 );
-    [xx, yy, zz] = ndgrid( x, y, z );
-else
-    error('CHEBFUN:CHEBFUN3T:constructor:points3D:tecType', ...
-        'Unrecognized technology');
-end
-
-end
 %%
 function [isHappyX, isHappyY, isHappyZ, cutoffX2, cutoffY2, cutoffZ2] = ...
     happinessCheck3D(simple_3D_coeffs, pref)
@@ -199,9 +156,7 @@ end
 %%
 function grid = gridRefinePhase1(grid)
 % Grid refinement strategy in Phase 1. It does the same for all TECHS.
-
 grid = floor(sqrt(2)^(floor(2*log2(grid)) + 1)) + 1;
-
 end
 
 %%
@@ -217,9 +172,9 @@ if ( isa(tech, 'chebtech2') )
     grid = 2*grid-1;
 elseif ( isa(tech, 'trigtech') )
     % Double sampling on tensor grid:
-    grid = 2^(floor( log2(grid)+1));
+    grid = 2^(floor(log2(grid)+1));
 elseif ( isa(tech, 'chebtech1') )
-    grid = 3 * grid; 
+    grid = 3 * grid;
 else
     error('CHEBFUN:CHEBFUN3:constructor:gridRefinePhase2:techType', ...
         'Technology is unrecognized.');
