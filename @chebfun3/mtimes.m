@@ -33,7 +33,7 @@ if ( isa(f, 'chebfun3') )           % CHEBFUN3 * ???
         
         X = innerProduct(fCols, g);
         temp = squeeze(chebfun3.txm(fCore, X.', 1));
-        [U, S, V] = svd(temp);
+        [U, S, V] = svd(temp, 'econ');
         h = chebfun2();
         h.rows = fRows * U;
         h.cols = fTubes * V;
